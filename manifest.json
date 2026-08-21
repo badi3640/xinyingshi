@@ -1,0 +1,17 @@
+{
+  "name": "千寻时光",
+  "short_name": "千寻时光",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8f5e9",
+  "theme_color": "#2e7d32",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

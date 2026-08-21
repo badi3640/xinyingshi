@@ -1,0 +1,17 @@
+# Cloudflare Pages - Wrangler 配置
+# 用于本地开发和部署配置
+#
+# 部署步骤:
+# 1. 在 Cloudflare Dashboard 创建 KV Namespace，命名为 YINGSHI_KV
+# 2. 将下方 kv_namespaces 的 id 替换为你的 KV Namespace ID
+# 3. 运行: npx wrangler pages deploy . --project-name=yingshi
+
+name = "yingshi"
+compatibility_date = "2024-01-01"
+
+# KV 命名空间绑定
+# 部署前请替换为你的 KV Namespace ID
+# 创建 KV: npx wrangler kv:namespace create YINGSHI_KV
+[[kv_namespaces]]
+binding = "YINGSHI_KV"
+id = "YOUR_KV_NAMESPACE_ID_HERE"

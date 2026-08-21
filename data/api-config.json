@@ -1,0 +1,8 @@
+{
+  "apis": [
+    { "url": "https://cj.lziapi.com/api.php/provide/vod/", "name": "Lziapi" },
+    { "url": "https://cj.rycjapi.com/api.php/provide/vod/", "name": "Rycjapi" },
+    { "url": "https://api.ffzyapi.com/api.php/provide/vod/", "name": "Ffzyapi" },
+    { "url": "https://155api.com/api.php/provide/vod/", "name": "155api" }
+  ]
+}
