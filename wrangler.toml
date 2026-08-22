@@ -6,7 +6,7 @@
 # 2. 将下方 kv_namespaces 的 id 替换为你的 KV Namespace ID
 # 3. 运行: npx wrangler pages deploy . --project-name=yingshi
 
-name = "yingshi"
+name = "YINGSHI_KV"
 compatibility_date = "2024-01-01"
 
 # KV 命名空间绑定
