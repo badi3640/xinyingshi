@@ -40,8 +40,13 @@ export async function onRequest(context) {
     try {
         parsed = new URL(targetUrl);
     } catch {
-        if (hasImgParam) return placeholderGif();
-        return jsonResp({ code: 0, msg: '不支持的协议' });
+        // 处理 protocol-relative URL: //example.com/path
+        try {
+            parsed = new URL((targetUrl.startsWith('//') ? locationProtocol() + targetUrl : targetUrl));
+        } catch {
+            if (hasImgParam) return placeholderGif();
+            return jsonResp({ code: 0, msg: '不支持的协议' });
+        }
     }
     if (!['http:', 'https:'].includes(parsed.protocol)) {
         if (hasImgParam) return placeholderGif();
@@ -137,39 +142,56 @@ export async function onRequest(context) {
 // ============ m3u8 URL 重写 ============
 
 function rewriteM3u8(content, baseUrl) {
-    const lines = content.split('\n');
+    const lines = content.split(/\r?\n/);
     const result = [];
-    for (const line of lines) {
+    for (let rawLine of lines) {
+        // 保留原始换行符的空行样式
+        const line = rawLine.replace(/\r/g, '');
         const trimmed = line.trim();
         if (trimmed === '') {
-            result.push(line);
+            result.push('');
             continue;
         }
 
-        // #EXT-X-KEY 等带 URI="..." 的属性行
+        // 注释或标签行（以 # 开头），但 #EXT-X-KEY 可能包含 URI 属性
         if (trimmed.startsWith('#')) {
-            const uriMatch = trimmed.match(/URI="([^"]+)"/);
+            // 匹配 URI="..." 或 URI='...'
+            const uriMatch = trimmed.match(/URI\s*=\s*(["'])(.*?)\1/);
             if (uriMatch) {
-                const originalUri = uriMatch[1];
-                if (!isAbsoluteUrl(originalUri) || !originalUri.includes('proxy.php?url=')) {
+                const originalUri = uriMatch[2].trim();
+                // 如果已经是代理地址则不重复代理
+                if (!originalUri.includes('proxy.php?url=')) {
                     const absoluteUri = resolveUrl(baseUrl, originalUri);
                     const proxyUri = `proxy.php?url=${encodeURIComponent(absoluteUri)}`;
-                    result.push(line.replace(`URI="${originalUri}"`, `URI="${proxyUri}"`));
+                    // 替换 URI=... 子串，保持其他属性不变
+                    const replaced = trimmed.replace(uriMatch[0], `URI="${proxyUri}"`);
+                    result.push(replaced);
                     continue;
                 }
             }
-            result.push(line);
+            // 其他注释行直接保留
+            result.push(trimmed);
             continue;
         }
 
-        // 已经是代理 URL，跳过
-        if (isAbsoluteUrl(trimmed) && trimmed.includes('proxy.php?url=')) {
-            result.push(line);
+        // 普通行：可能是注释以外的 URL（子 m3u8 或 ts 分片）
+        // 有时候行内会带有空格或标签，取首个 token
+        const firstToken = trimmed.split(/\s+/)[0];
+        const token = firstToken;
+
+        // 已经是代理 URL，直接保留
+        if ((isAbsoluteUrl(token) || token.startsWith('proxy.php?url=')) && token.includes('proxy.php?url=')) {
+            result.push(token);
             continue;
         }
 
-        // 普通 URL 行（子 m3u8 或 ts 分片）→ 走代理
-        const absoluteUrl = resolveUrl(baseUrl, trimmed);
+        // 解析为绝对 URL
+        const absoluteUrl = resolveUrl(baseUrl, token);
+        // 如果解析失败则保留原行
+        if (!absoluteUrl) {
+            result.push(trimmed);
+            continue;
+        }
         result.push(`proxy.php?url=${encodeURIComponent(absoluteUrl)}`);
     }
     return result.join('\n');
@@ -178,22 +200,33 @@ function rewriteM3u8(content, baseUrl) {
 // ============ URL 工具 ============
 
 function resolveUrl(base, relative) {
-    if (!relative) return base;
+    if (!relative) return null;
+    // 如果已经是绝对 URL，直接返回
     if (isAbsoluteUrl(relative)) return relative;
     try {
+        // new URL handles relative paths
         return new URL(relative, base).href;
-    } catch {
-        return base;
+    } catch (e) {
+        try {
+            // 处理 protocol-relative URLs
+            if (relative.startsWith('//')) return locationProtocol() + relative;
+        } catch (e2) {}
+        return null;
     }
 }
 
 function isAbsoluteUrl(url) {
-    return /^https?:\/\//i.test(url);
+    return /^https?:\/\//i.test(url) || /^\/\//.test(url);
 }
 
 function getExt(pathname) {
     const match = pathname.match(/\.([^.\\/]+)$/);
     return match ? match[1].toLowerCase() : '';
+}
+
+function locationProtocol() {
+    // 在 Cloudflare Worker 环境没有 window.location；默认 https:
+    return typeof location !== 'undefined' && location.protocol ? location.protocol : 'https:';
 }
 
 // ============ 响应构造工具 ============
