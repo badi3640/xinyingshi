@@ -64,6 +64,8 @@ export async function getConfig(kv) {
             { url: 'https://155api.com/api.php/provide/vod/', name: '155api' },
         ],
         shopUrl: '',
+        // 默认免费试用时长（分钟）
+        trialDuration: 60,
     };
 }
 
