@@ -464,7 +464,7 @@
                 <div class="form-group">
                     <label>免费试用时长 (分钟)</label>
                     <input type="number" id="trialDuration" value="60" min="1" max="1440" autocomplete="off">
-                    <p class"hint">设置用户免费试用的时长，单位：分钟，默认60分钟（1小时）</p>
+                    <p class="hint">设置用户免费试用的时长，单位：分钟，默认60分钟（1小时）</p>
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>修改管理密码（留空则不修改）</label>
@@ -771,7 +771,7 @@
             try {
                 const data = await request('listAccounts', 'POST', { keyword });
                 if (data.code !== 0) return showMessage(data.msg, true);
-                renderAccountsList(data.data || [], keyword);
+                renderAccountsListSafe(data.data || [], keyword);
             } catch (e) {
                 showMessage('加载账号失败：' + e.message, true);
             }
@@ -782,7 +782,8 @@
             loadAccounts(keyword);
         }
 
-        function renderAccountsList(accounts, keyword = '') {
+        // 安全渲染账户列表：不使用行内 onclick，使用 data-username 并事件委托
+        function renderAccountsListSafe(accounts, keyword = '') {
             const list = document.getElementById('accountsList');
             if (accounts.length === 0) {
                 list.innerHTML = `<p class="hint">${keyword ? '未找到匹配账号' : '暂无账号'}</p>`;
@@ -807,11 +808,11 @@
                                 <tr class="${a.disabled ? 'disabled' : ''}">
                                     <td style="font-family:monospace;">${escapeHtml(a.username)}</td>
                                     <td style="font-family:monospace;">${escapeHtml(a.password)}</td>
-                                    <td style="text-align:center;"><span class="status-badge ${a.disabled ? 'disabled' : 'normal'}">${a.disabled ? '已禁用' : '正常'}</span></td>
+                                    <td style="text-align:center;"> <span class="status-badge ${a.disabled ? 'disabled' : 'normal'}">${a.disabled ? '已禁用' : '正常'}</span></td>
                                     <td style="color:#666;">${escapeHtml(a.last_login_at || '-')}</td>
                                     <td style="text-align:center;white-space:nowrap;">
-                                        <button class="btn ${a.disabled ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="toggleAccount('${escapeHtml(a.username)}')">${a.disabled ? '启用' : '禁用'}</button>
-                                        <button class="btn btn-danger btn-sm" style="margin-left:0.4rem;" onclick="deleteAccount('${escapeHtml(a.username)}')">删除</button>
+                                        <button class="btn ${a.disabled ? 'btn-primary' : 'btn-secondary'} btn-sm action-toggle" data-username="${encodeURIComponent(a.username)}">${a.disabled ? '启用' : '禁用'}</button>
+                                        <button class="btn btn-danger btn-sm action-delete" style="margin-left:0.4rem;" data-username="${encodeURIComponent(a.username)}">删除</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -819,6 +820,26 @@
                     </table>
                 </div>
             `;
+
+            // 事件委托
+            const wrapper = list.querySelector('.table-wrapper');
+            if (wrapper) {
+                wrapper.removeEventListener('click', accountsListClickHandler);
+                wrapper.addEventListener('click', accountsListClickHandler);
+            }
+        }
+
+        function accountsListClickHandler(e) {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const encoded = btn.getAttribute('data-username');
+            const username = encoded ? decodeURIComponent(encoded) : '';
+            if (!username) return;
+            if (btn.classList.contains('action-toggle')) {
+                toggleAccount(username);
+            } else if (btn.classList.contains('action-delete')) {
+                deleteAccount(username);
+            }
         }
 
         checkLogin();
