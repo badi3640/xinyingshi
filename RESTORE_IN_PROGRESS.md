@@ -1,0 +1,1 @@
+{ "restore": "This is a placeholder to trigger batch restore - actual restore will apply individual file contents from target commit 6e9b2b6" }
