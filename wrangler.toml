@@ -14,4 +14,4 @@ compatibility_date = "2024-01-01"
 # 创建 KV: npx wrangler kv:namespace create YINGSHI_KV
 [[kv_namespaces]]
 binding = "YINGSHI_KV"
-id = "YOUR_KV_NAMESPACE_ID_HERE"
+id = "096d0414981e4896aaf27edd862bb659"
