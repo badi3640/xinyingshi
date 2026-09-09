@@ -15,6 +15,10 @@ const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'];
 const VIDEO_EXTS = ['ts', 'mp4', 'flv', 'mkv', 'webm', 'm4s', 'mov'];
 const IMAGE_KEYWORD_RE = /\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)/i;
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ============ 主入口 ============
 
 export async function onRequest(context) {
@@ -73,18 +77,47 @@ export async function onRequest(context) {
     const accept = request.headers.get('Accept');
     if (accept) headers.set('Accept', accept);
 
-    let resp;
-    try {
-        resp = await fetch(targetUrl, {
-            headers,
-            redirect: 'follow',
-            cf: {
-                cacheEverything: false,
-            },
-        });
-    } catch (err) {
+    // 带重试与首字节超时的上游请求：
+    // 国内网络到源站偶发超时/连接失败/5xx，重试可显著提升播放与加载成功率
+    const MAX_ATTEMPTS = 2;
+    // 首字节超时：拿到响应头后立即取消，不会中断后续 body 的流式传输
+    const ttfbTimeout = isVideo ? 15000 : 8000;
+    let resp = null;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), ttfbTimeout);
+        try {
+            const r = await fetch(targetUrl, {
+                headers,
+                redirect: 'follow',
+                signal: controller.signal,
+                cf: {
+                    cacheEverything: false,
+                },
+            });
+            clearTimeout(timer);
+            // 5xx / 429 视为临时错误，未到最后一次时重试
+            if ((r.status >= 500 || r.status === 429) && attempt < MAX_ATTEMPTS) {
+                lastErr = new Error('HTTP ' + r.status);
+                await sleep(250 * attempt);
+                continue;
+            }
+            resp = r;
+            break;
+        } catch (err) {
+            clearTimeout(timer);
+            lastErr = err;
+            if (attempt < MAX_ATTEMPTS) {
+                await sleep(250 * attempt);
+                continue;
+            }
+        }
+    }
+
+    if (!resp) {
         if (isImage) return placeholderGif();
-        return jsonResp({ code: 0, msg: '请求失败: ' + err.message });
+        return jsonResp({ code: 0, msg: '请求失败: ' + (lastErr && lastErr.message ? lastErr.message : 'unknown') });
     }
 
     if (!resp.ok && isImage) return placeholderGif();

@@ -35,15 +35,19 @@ export function generateRandomString(length, chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ
 }
 
 export function generateUsername(accounts) {
+    // 账号：5 位纯小写字母，并确保不与已有账号重复
     let username;
+    let attempts = 0;
     do {
-        username = 'user' + generateRandomString(6, '0123456789');
-    } while (accounts[username]);
+        username = generateRandomString(5, 'abcdefghijklmnopqrstuvwxyz');
+        attempts++;
+    } while (accounts[username] && attempts < 100);
     return username;
 }
 
 export function generatePassword() {
-    return generateRandomString(8, 'abcdefghijklmnopqrstuvwxyz0123456789');
+    // 密码：6 位纯数字
+    return generateRandomString(6, '0123456789');
 }
 
 export function generateToken() {
@@ -75,8 +79,11 @@ export async function saveConfig(kv, config) {
 
 // ============ KV 账号管理 ============
 
-export async function getAccounts(kv) {
-    const data = await kv.get('accounts', 'json');
+export async function getAccounts(kv, cacheTtl) {
+    // cacheTtl=0 可强制读取最新数据（绕过 KV 边缘 60s 缓存），
+    // 用于登录/校验等对一致性敏感、且刚生成的账号需立即可读的场景
+    const options = typeof cacheTtl === 'number' ? { type: 'json', cacheTtl } : { type: 'json' };
+    const data = await kv.get('accounts', options);
     return data || {};
 }
 

@@ -98,6 +98,12 @@
             border: none;
             border-radius: 10px;
             cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
         }
 
         .btn-primary {
@@ -105,93 +111,738 @@
             color: #fff;
         }
 
-        .btn-secondary {
-            background: rgba(0,0,0,0.05);
-            color: #333;
+        .btn-primary:hover {
+            background: #1b5e20;
+            transform: translateY(-1px);
         }
 
-        .table {
+        .btn-danger {
+            background: #e53935;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #c62828;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #444;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .btn-secondary:hover {
+            background: #eeeeee;
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 0.45rem 0.85rem;
+            font-size: 0.8rem;
+            border-radius: 8px;
+        }
+
+        .login-form .btn {
+            width: 100%;
+            margin-top: 0.5rem;
+            padding: 0.8rem;
+            font-size: 1rem;
+        }
+
+        .api-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .api-item {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto auto;
+            gap: 0.6rem;
+            align-items: center;
+            padding: 0.85rem;
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            transition: all 0.2s;
+        }
+
+        .api-item:hover {
+            border-color: rgba(46, 125, 50, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .api-item input {
+            min-width: 0;
+        }
+
+        .api-item.disabled {
+            opacity: 0.65;
+            background: #fafafa;
+        }
+
+        .api-item.disabled input {
+            background: #f5f5f5;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .actions .btn {
+            flex: 1;
+            min-width: 110px;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .top-bar .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #2e7d32;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .top-bar .status::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+        }
+
+        .message {
+            padding: 0.85rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 1.25rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+
+        .message.success {
+            display: block;
+            background: rgba(46, 125, 50, 0.1);
+            color: #1b5e20;
+            border: 1px solid rgba(46, 125, 50, 0.15);
+        }
+
+        .message.error {
+            display: block;
+            background: rgba(198, 40, 40, 0.08);
+            color: #b71c1c;
+            border: 1px solid rgba(198, 40, 40, 0.12);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .hint {
+            color: #888;
+            font-size: 0.8rem;
+            margin-top: 0.4rem;
+        }
+
+        .section-divider {
+            border: none;
+            height: 1px;
+            background: rgba(0, 0, 0, 0.06);
+            margin: 1.5rem 0;
+        }
+
+        .account-toolbar {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto;
+            gap: 0.6rem;
+            align-items: end;
+            margin-bottom: 1rem;
+        }
+
+        .account-toolbar .form-group {
+            margin-bottom: 0;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            padding-left: 2.2rem;
+        }
+
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 0.8rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.9rem;
+            opacity: 0.5;
+        }
+
+        .table-wrapper {
+            max-height: 360px;
+            overflow-y: auto;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        table {
             width: 100%;
             border-collapse: collapse;
-        }
-
-        .table th, .table td {
-            padding: 0.65rem 0.75rem;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            text-align: left;
-        }
-
-        .small {
             font-size: 0.85rem;
-            color: #666;
         }
 
-        /* 省略其余样式（保留原样） */
+        thead {
+            background: #f8faf8;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        th {
+            padding: 0.75rem 0.8rem;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 0.7rem 0.8rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+            vertical-align: middle;
+        }
+
+        tbody tr:hover {
+            background: #f8faf8;
+        }
+
+        tbody tr.disabled {
+            background: rgba(198, 40, 40, 0.03);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .status-badge.normal {
+            background: rgba(46, 125, 50, 0.1);
+            color: #2e7d32;
+        }
+
+        .status-badge.disabled {
+            background: rgba(198, 40, 40, 0.1);
+            color: #c62828;
+        }
+
+        .generated-panel {
+            background: #f8faf8;
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px dashed rgba(46, 125, 50, 0.2);
+        }
+
+        .generated-panel textarea {
+            width: 100%;
+            height: 120px;
+            padding: 0.75rem;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            background: #fff;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem 0.75rem;
+            }
+
+            .card {
+                padding: 1.1rem;
+                border-radius: 14px;
+            }
+
+            h1 {
+                font-size: 1.35rem;
+            }
+
+            .api-item {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            .api-item .btn-group {
+                display: flex;
+                gap: 0.5rem;
+            }
+
+            .account-toolbar {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .account-toolbar .form-group {
+                grid-column: 1 / -1;
+            }
+
+            .account-toolbar .btn {
+                grid-column: span 1;
+            }
+
+            .actions .btn {
+                flex: 1 1 45%;
+            }
+
+            th, td {
+                padding: 0.6rem 0.5rem;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">千寻时光</div>
-        <div class="search-bar">
-            <input type="search" placeholder="搜索电影/剧集/演员..." aria-label="搜索">
-            <button type="button">搜索</button>
+    <div class="container">
+        <h1>线路管理后台</h1>
+
+        <div id="message" class="message"></div>
+
+        <div id="loginPanel" class="card">
+            <div class="card-title">管理员登录</div>
+            <div class="login-form">
+                <div class="form-group">
+                    <label>管理密码</label>
+                    <input type="password" id="password" placeholder="请输入管理密码" autocomplete="current-password" onkeypress="handleLoginKey(event)">
+                    <p class="hint">你打开这个页面想干嘛？</p>
+                </div>
+                <button class="btn btn-primary" onclick="login()">登录</button>
+            </div>
         </div>
-        <div class="header-right">
-            <div class="header-actions">
-                <button class="btn btn-home" type="button">首页</button>
-                <button class="btn btn-history" type="button">历史</button>
-                <a class="btn btn-shop" href="#" role="button">购买会员</a>
+
+        <div id="managePanel" class="hidden">
+            <div class="card">
+                <div class="top-bar">
+                    <div class="status">已登录</div>
+                    <button class="btn btn-secondary btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">线路配置</div>
+                <div id="apiList" class="api-list"></div>
+
+                <div class="actions">
+                    <button class="btn btn-secondary" onclick="addApi()">添加线路</button>
+                    <button class="btn btn-primary" onclick="saveApis()">保存配置</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">站点设置</div>
+                <div class="form-group">
+                    <label>商品购买链接（首页“购买会员”按钮跳转地址）</label>
+                    <input type="text" id="shopUrl" placeholder="https://item.taobao.com/item.htm?id=xxx" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>免费试用时长 (分钟)</label>
+                    <input type="number" id="trialDuration" value="60" min="1" max="1440" autocomplete="off">
+                    <p class="hint">设置用户免费试用的时长，单位：分钟，默认60分钟（1小时）</p>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>修改管理密码（留空则不修改）</label>
+                    <input type="password" id="newPassword" placeholder="新密码" autocomplete="new-password">
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">账号管理</div>
+                <div class="account-toolbar">
+                    <div class="form-group">
+                        <label>生成数量（1-1000）</label>
+                        <input type="number" id="accountCount" min="1" max="1000" value="10" autocomplete="off">
+                    </div>
+                    <button class="btn btn-primary" onclick="generateAccounts()">批量生成</button>
+                    <button class="btn btn-secondary" onclick="loadAccounts()">刷新</button>
+                    <button class="btn btn-secondary" onclick="exportAllAccounts()">导出全部</button>
+                </div>
+                <div class="form-group search-box">
+                    <input type="text" id="accountSearch" placeholder="搜索账号关键词" autocomplete="off" oninput="searchAccounts()">
+                </div>
+                <div id="generatedAccounts" style="margin-top: 1rem;"></div>
+                <div id="accountsList" style="margin-top: 1rem;"></div>
             </div>
         </div>
     </div>
 
-    <main class="main-content" role="main">
-        <section class="hero active">
-            <img class="hero-bg" src="hero.jpg" alt="千寻时光 推荐图片">
-            <div class="hero-overlay"></div>
-            <div class="hero-content">
-                <span class="hero-label">推荐</span>
-                <h1 class="hero-title">欢迎使用千寻时光</h1>
-                <p class="hero-desc">在这里可以查找并观看你喜欢的视频内容。</p>
-                <button class="hero-btn" type="button">立即播放</button>
-            </div>
-        </section>
+    <script>
+        const API_URL = 'api.php';
+        let currentGeneratedAccounts = [];
 
-        <div class="content-layout">
-            <aside class="sidebar" aria-label="侧边导航">
-                <div class="sidebar-section">
-                    <div class="sidebar-title">分类</div>
-                    <div class="category-item">电影</div>
-                    <div class="category-item">电视剧</div>
-                    <div class="category-item">综艺</div>
-                </div>
-            </aside>
+        function showMessage(text, isError) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + (isError ? 'error' : 'success');
+            setTimeout(() => el.className = 'message', 3000);
+        }
 
-            <section class="content-area">
-                <div class="row-section">
-                    <div class="row-header"><h2>热门</h2><div class="row-count">共 10 条</div></div>
-                    <div class="movie-row">
-                        <div class="movie-card">
-                            <div class="movie-poster-wrapper">
-                                <img class="movie-poster" src="poster1.jpg" alt="示例电影海报">
-                                <div class="poster-placeholder"><span>影</span></div>
-                            </div>
-                            <div class="movie-info"><div class="movie-title">示例电影</div><div class="movie-remarks">简介 ...</div></div>
-                        </div>
+        async function request(action, method = 'GET', body = null) {
+            const options = { method };
+            if (method === 'GET') {
+                options.cache = 'no-store';
+            }
+            if (body) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(body);
+            }
+            const res = await fetch(API_URL + '?action=' + action + '&_=' + Date.now(), options);
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await res.text();
+                throw new Error('服务器返回非 JSON 数据：' + text.slice(0, 200));
+            }
+            return res.json();
+        }
+
+        async function checkLogin() {
+            try {
+                const data = await request('check');
+                if (data.loggedIn) {
+                    showManagePanel();
+                    loadApis();
+                    loadAccounts();
+                }
+            } catch (e) {
+                showMessage(e.message, true);
+            }
+        }
+
+        function handleLoginKey(event) {
+            if (event.key === 'Enter') login();
+        }
+
+        async function login() {
+            try {
+                const password = document.getElementById('password').value.trim();
+                if (!password) return showMessage('请输入密码', true);
+                const data = await request('adminLogin', 'POST', { password });
+                if (data.code === 0) {
+                    showManagePanel();
+                    loadApis();
+                    loadAccounts();
+                } else {
+                    showMessage(data.msg || '登录失败', true);
+                }
+            } catch (e) {
+                showMessage('请求失败：' + e.message, true);
+            }
+        }
+
+        async function logout() {
+            try {
+                await request('logout', 'POST');
+            } catch (e) {}
+            showLoginPanel();
+        }
+
+        function showLoginPanel() {
+            document.getElementById('loginPanel').classList.remove('hidden');
+            document.getElementById('managePanel').classList.add('hidden');
+        }
+
+        function showManagePanel() {
+            document.getElementById('loginPanel').classList.add('hidden');
+            document.getElementById('managePanel').classList.remove('hidden');
+        }
+
+        async function loadApis() {
+            try {
+                const data = await request('adminGet');
+                if (data.code !== 0) return showMessage(data.msg, true);
+                renderApiList(data.data.apis || []);
+                document.getElementById('shopUrl').value = data.data.shopUrl || '';
+                document.getElementById('trialDuration').value = data.data.trialDuration || 60;
+            } catch (e) {
+                showMessage('加载线路失败：' + e.message, true);
+            }
+        }
+
+        function renderApiList(apis) {
+            const list = document.getElementById('apiList');
+            if (apis.length === 0) {
+                list.innerHTML = '<p class="hint">暂无线路，点击“添加线路”按钮新增</p>';
+                return;
+            }
+            list.innerHTML = apis.map((api, index) => `
+                <div class="api-item ${api.disabled ? 'disabled' : ''}">
+                    <input type="text" placeholder="线路名称" value="${escapeHtml(api.name)}" data-field="name" data-index="${index}" autocomplete="off" ${api.disabled ? 'disabled' : ''}>
+                    <input type="text" placeholder="接口地址" value="${escapeHtml(api.url)}" data-field="url" data-index="${index}" autocomplete="off" ${api.disabled ? 'disabled' : ''}>
+                    <input type="hidden" value="${api.disabled ? '1' : '0'}" data-field="disabled" data-index="${index}">
+                    <div class="btn-group">
+                        <button class="btn ${api.disabled ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="toggleApi(${index})">${api.disabled ? '启用' : '暂停'}</button>
+                        <button class="btn btn-danger btn-sm" onclick="removeApi(${index})">删除</button>
                     </div>
                 </div>
-            </section>
-        </div>
-    </main>
+            `).join('');
+        }
 
-    <script>
-        // 简单交互：logo 点击回到顶部
-        document.addEventListener('DOMContentLoaded', function() {
-            var logo = document.querySelector('.logo');
-            if (logo) {
-                logo.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        function getApisFromInputs() {
+            const items = document.querySelectorAll('.api-item');
+            const apis = [];
+            items.forEach(item => {
+                const nameInput = item.querySelector('input[data-field="name"]');
+                const urlInput = item.querySelector('input[data-field="url"]');
+                const disabledInput = item.querySelector('input[data-field="disabled"]');
+                const name = nameInput ? nameInput.value.trim() : '';
+                const url = urlInput ? urlInput.value.trim() : '';
+                const disabled = disabledInput ? disabledInput.value === '1' : false;
+                if (url) apis.push({ name, url, disabled });
+            });
+            return apis;
+        }
+
+        function addApi() {
+            const apis = getApisFromInputs();
+            apis.push({ name: '', url: '', disabled: false });
+            renderApiList(apis);
+        }
+
+        function removeApi(index) {
+            const apis = getApisFromInputs();
+            apis.splice(index, 1);
+            renderApiList(apis);
+        }
+
+        function toggleApi(index) {
+            const apis = getApisFromInputs();
+            if (apis[index]) {
+                apis[index].disabled = !apis[index].disabled;
+                renderApiList(apis);
             }
-        });
+        }
+
+        async function saveApis() {
+            try {
+                const apis = getApisFromInputs();
+                if (apis.length < 1) return showMessage('至少需要保留一条线路', true);
+                for (const api of apis) {
+                    if (!/^https?:\/\//i.test(api.url)) {
+                        return showMessage('线路地址必须以 http:// 或 https:// 开头', true);
+                    }
+                }
+                const newPassword = document.getElementById('newPassword').value.trim();
+                const shopUrl = document.getElementById('shopUrl').value.trim();
+                const body = { apis, shopUrl, trialDuration: parseInt(document.getElementById('trialDuration').value) || 60 };
+                if (newPassword) body.password = newPassword;
+
+                const data = await request('save', 'POST', body);
+                if (data.code === 0) {
+                    showMessage(data.msg);
+                    document.getElementById('newPassword').value = '';
+                    loadApis();
+                } else {
+                    showMessage(data.msg || '保存失败', true);
+                }
+            } catch (e) {
+                showMessage('保存失败：' + e.message, true);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function downloadTxt(filename, content) {
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function accountsToTxt(accounts) {
+            return accounts.map(a => `账号：${a.username}  密码：${a.password}`).join('\n');
+        }
+
+        async function generateAccounts() {
+            try {
+                const count = parseInt(document.getElementById('accountCount').value, 10);
+                if (!count || count < 1 || count > 1000) {
+                    return showMessage('生成数量需在 1-1000 之间', true);
+                }
+                const data = await request('generateAccounts', 'POST', { count });
+                if (data.code === 0) {
+                    currentGeneratedAccounts = data.data || [];
+                    showMessage(`成功生成 ${currentGeneratedAccounts.length} 个账号`);
+                    document.getElementById('generatedAccounts').innerHTML = `
+                        <div class="generated-panel">
+                            <label style="margin-bottom:0.5rem;">本次生成的账号密码</label>
+                            <textarea id="generatedAccountsText" readonly>${escapeHtml(accountsToTxt(currentGeneratedAccounts))}</textarea>
+                            <div class="actions" style="margin-top: 0.75rem; margin-bottom: 0;">
+                                <button class="btn btn-secondary" onclick="exportCurrentAccounts()">导出本次生成</button>
+                            </div>
+                        </div>
+                    `;
+                    loadAccounts();
+                } else {
+                    showMessage(data.msg || '生成失败', true);
+                }
+            } catch (e) {
+                showMessage('生成失败：' + e.message, true);
+            }
+        }
+
+        function exportCurrentAccounts() {
+            if (!currentGeneratedAccounts || currentGeneratedAccounts.length === 0) {
+                return showMessage('没有可导出的账号', true);
+            }
+            const date = new Date().toISOString().slice(0, 10);
+            downloadTxt(`accounts_${date}.txt`, accountsToTxt(currentGeneratedAccounts));
+            showMessage('本次生成的账号已导出');
+        }
+
+        async function exportAllAccounts() {
+            try {
+                const data = await request('listAccounts');
+                if (data.code !== 0) return showMessage(data.msg, true);
+                const accounts = data.data || [];
+                if (accounts.length === 0) return showMessage('暂无可导出的账号', true);
+                const date = new Date().toISOString().slice(0, 10);
+                downloadTxt(`all_accounts_${date}.txt`, accountsToTxt(accounts));
+                showMessage('全部账号已导出');
+            } catch (e) {
+                showMessage('导出失败：' + e.message, true);
+            }
+        }
+
+        async function toggleAccount(username) {
+            try {
+                const data = await request('toggleAccount', 'POST', { username });
+                if (data.code === 0) {
+                    showMessage(data.msg);
+                    searchAccounts();
+                } else {
+                    showMessage(data.msg || '操作失败', true);
+                }
+            } catch (e) {
+                showMessage('操作失败：' + e.message, true);
+            }
+        }
+
+        async function deleteAccount(username) {
+            if (!confirm(`确定删除账号 ${username} 吗？删除后该账号将无法登录。`)) return;
+            try {
+                const data = await request('deleteAccount', 'POST', { username });
+                if (data.code === 0) {
+                    showMessage(data.msg);
+                    searchAccounts();
+                } else {
+                    showMessage(data.msg || '删除失败', true);
+                }
+            } catch (e) {
+                showMessage('删除失败：' + e.message, true);
+            }
+        }
+
+        async function loadAccounts(keyword = '') {
+            try {
+                const data = await request('listAccounts', 'POST', { keyword });
+                if (data.code !== 0) return showMessage(data.msg, true);
+                renderAccountsListSafe(data.data || [], keyword);
+            } catch (e) {
+                showMessage('加载账号失败：' + e.message, true);
+            }
+        }
+
+        function searchAccounts() {
+            const keyword = document.getElementById('accountSearch').value.trim();
+            loadAccounts(keyword);
+        }
+
+        // 安全渲染账户列表：不使用行内 onclick，使用 data-username 并事件委托
+        function renderAccountsListSafe(accounts, keyword = '') {
+            const list = document.getElementById('accountsList');
+            if (accounts.length === 0) {
+                list.innerHTML = `<p class="hint">${keyword ? '未找到匹配账号' : '暂无账号'}</p>`;
+                return;
+            }
+            const disabled = accounts.filter(a => a.disabled).length;
+            list.innerHTML = `
+                <p class="hint">${keyword ? `搜索“${escapeHtml(keyword)}”结果：` : ''}共 ${accounts.length} 个账号，已禁用 ${disabled} 个</p>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>账号</th>
+                                <th>密码</th>
+                                <th style="text-align:center;">状态</th>
+                                <th>最近登录</th>
+                                <th style="text-align:center;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${accounts.map(a => `
+                                <tr class="${a.disabled ? 'disabled' : ''}">
+                                    <td style="font-family:monospace;">${escapeHtml(a.username)}</td>
+                                    <td style="font-family:monospace;">${escapeHtml(a.password)}</td>
+                                    <td style="text-align:center;"> <span class="status-badge ${a.disabled ? 'disabled' : 'normal'}">${a.disabled ? '已禁用' : '正常'}</span></td>
+                                    <td style="color:#666;">${escapeHtml(a.last_login_at || '-')}</td>
+                                    <td style="text-align:center;white-space:nowrap;">
+                                        <button class="btn ${a.disabled ? 'btn-primary' : 'btn-secondary'} btn-sm action-toggle" data-username="${encodeURIComponent(a.username)}">${a.disabled ? '启用' : '禁用'}</button>
+                                        <button class="btn btn-danger btn-sm action-delete" style="margin-left:0.4rem;" data-username="${encodeURIComponent(a.username)}">删除</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            // 事件委托
+            const wrapper = list.querySelector('.table-wrapper');
+            if (wrapper) {
+                wrapper.removeEventListener('click', accountsListClickHandler);
+                wrapper.addEventListener('click', accountsListClickHandler);
+            }
+        }
+
+        function accountsListClickHandler(e) {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const encoded = btn.getAttribute('data-username');
+            const username = encoded ? decodeURIComponent(encoded) : '';
+            if (!username) return;
+            if (btn.classList.contains('action-toggle')) {
+                toggleAccount(username);
+            } else if (btn.classList.contains('action-delete')) {
+                deleteAccount(username);
+            }
+        }
+
+        checkLogin();
     </script>
 </body>
 </html>

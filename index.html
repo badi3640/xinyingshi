@@ -25,7 +25,45 @@
             }
         })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest?v=45"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest?v=45" onerror="window.__hlsPrimaryFailed=true"></script>
+    <script>
+        // hls.js 多 CDN 容灾：jsdelivr 在国内常被墙/超时，加载失败时自动切换国内可访问的 CDN
+        (function () {
+            var FALLBACKS = [
+                'https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.6.15/hls.min.js',
+                'https://cdn.bootcdn.net/ajax/libs/hls.js/1.6.14/hls.min.js',
+                'https://cdn.staticfile.org/hls.js/1.6.14/hls.min.js',
+                'https://unpkg.com/hls.js@1.6.15/dist/hls.min.js'
+            ];
+            var idx = 0, started = false;
+            function loadNext() {
+                if (window.Hls || idx >= FALLBACKS.length) return;
+                var s = document.createElement('script');
+                s.src = FALLBACKS[idx++];
+                s.onerror = loadNext;
+                document.head.appendChild(s);
+            }
+            function kick() { if (!started) { started = true; loadNext(); } }
+            window.__ensureHls = kick;
+            // 主源快速失败(onerror)立即回退；若被“黑洞”挂起则 3.5s 后超时回退
+            if (window.__hlsPrimaryFailed) kick();
+            else setTimeout(function () { if (!window.Hls) kick(); }, 3500);
+        })();
+
+        // 等待 hls.js 就绪（回退 CDN 为异步加载），供播放逻辑在缺少 Hls 时短暂等待
+        window.waitForHls = function (timeout) {
+            timeout = timeout || 8000;
+            return new Promise(function (resolve) {
+                if (window.Hls) return resolve(window.Hls);
+                if (typeof window.__ensureHls === 'function') window.__ensureHls();
+                var start = Date.now();
+                var timer = setInterval(function () {
+                    if (window.Hls) { clearInterval(timer); resolve(window.Hls); }
+                    else if (Date.now() - start > timeout) { clearInterval(timer); resolve(null); }
+                }, 150);
+            });
+        };
+    </script>
 
     <style>
         * {
@@ -1000,68 +1038,3596 @@
             padding-bottom: 0;
         }
 
-        /* 省略其余样式 */
+        .server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.6rem;
+            cursor: pointer;
+        }
+
+        .server-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .server-name::before {
+            content: '';
+            display: inline-block;
+            flex-shrink: 0;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .server-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .play-list {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 0;
+            padding: 0;
+        }
+
+        .play-list li {
+            padding: 5px 12px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            flex: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            min-width: 0;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        .play-list li span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .play-list li:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(0,0,0,0.15);
+            color: var(--text-primary);
+        }
+
+        .play-list li.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .detail-info-container {
+            background: rgba(255, 255, 255, 0.75);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            overflow: hidden;
+        }
+
+        .detail-poster-card {
+            float: left;
+            width: 200px;
+            margin: 0 1.5rem 1rem 0;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid var(--border);
+        }
+
+        .detail-poster-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 2 / 3;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg-tertiary);
+        }
+
+        .detail-poster {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+.detail-info h2 {
+            color: var(--text-primary);
+            margin-top: 0;
+            margin-bottom: 0.8rem;
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .detail-meta {
+            margin-bottom: 1.2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.5rem;
+        }
+
+        .detail-meta p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .detail-meta span {
+            color: var(--text-primary);
+            margin-right: 0.4rem;
+        }
+
+        .detail-blurb {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        .detail-blurb h3 {
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            font-size: 1.05rem;
+        }
+
+        .settings-form {
+            padding: 2rem;
+        }
+
+        .settings-form h3 {
+            margin-bottom: 1.5rem;
+            color: var(--accent);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.7rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.04);
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: rgba(0,0,0,0.08);
+        }
+
+        .api-list {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .api-list li {
+            padding: 0.85rem;
+            margin-bottom: 0.6rem;
+            background: rgba(0,0,0,0.03);
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border);
+        }
+
+        .api-list li.active {
+            border-left: 3px solid var(--accent);
+        }
+
+        .api-list li button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 0.35rem 0.85rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-left: 0.4rem;
+        }
+
+        .api-list li button:hover {
+            background: var(--accent-hover);
+        }
+
+        .api-list li .active-badge {
+            background: #2ecc71;
+            color: #fff;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-right: 0.5rem;
+        }
+
+        .settings-form .btn-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--accent);
+            width: 100%;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+            width: 100%;
+        }
+
+        .resume-play-btn {
+                position: fixed;
+                right: 1rem;
+                bottom: calc(1rem + env(safe-area-inset-bottom));
+                z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.8rem 1.2rem;
+            background: rgba(46, 125, 50, 0.9);
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(46, 125, 50, 0.35);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .resume-play-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(46, 125, 50, 0.45);
+        }
+
+        .resume-play-icon {
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --sidebar-width: 280px;
+            }
+
+            .header {
+                display: grid;
+                grid-template-columns: auto 1fr;
+                grid-template-rows: auto auto;
+                align-items: center;
+                align-content: space-evenly;
+                padding: calc(env(safe-area-inset-top) + 0.75rem) 0.75rem 0.75rem;
+                height: calc(150px + env(safe-area-inset-top));
+                gap: 0.75rem 0.4rem;
+            }
+
+            .menu-toggle {
+                display: inline-flex;
+                grid-column: 1;
+                grid-row: 1;
+                margin-right: 0;
+            }
+
+            .logo {
+                display: none;
+            }
+
+            .search-bar {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                width: 100%;
+                max-width: none;
+                margin: 0;
+            }
+
+            .search-bar input {
+                padding: 0.65rem 2.2rem 0.65rem 0.9rem;
+                font-size: 16px;
+                border: 2px solid rgba(46, 125, 50, 0.45);
+                background: rgba(255, 255, 255, 0.65);
+                box-shadow: 0 2px 8px rgba(46, 125, 50, 0.08);
+            }
+
+            .search-bar input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15), 0 4px 10px rgba(46, 125, 50, 0.12);
+            }
+
+            .header-actions {
+                grid-column: 2;
+                grid-row: 1;
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                min-width: 0;
+            }
+
+            .header-actions .btn,
+            .header-actions a.btn {
+                flex: 1 1 0;
+                justify-content: center;
+                padding: 0.45rem 0.25rem;
+                font-size: 0.75rem;
+                white-space: nowrap;
+                min-width: 0;
+                overflow: hidden;
+            }
+
+            .btn-home {
+                display: inline-flex;
+                padding: 0.45rem 0.25rem;
+                font-size: 0.75rem;
+                flex: 1 1 0;
+                justify-content: center;
+                min-width: 0;
+                overflow: hidden;
+            }
+
+            .main-content {
+                padding-top: calc(150px + env(safe-area-inset-top));
+            }
+
+            .hero {
+                height: 200px;
+                border-radius: 0 0 12px 12px;
+            }
+
+            .hero-content {
+                left: 0;
+                max-width: 100%;
+                padding: 0.75rem;
+            }
+
+            .hero-title {
+                font-size: 1.1rem;
+                margin-bottom: 0.4rem;
+            }
+
+            .hero-meta {
+                font-size: 0.75rem;
+                margin-bottom: 0.5rem;
+            }
+
+            .hero-desc {
+                display: none;
+            }
+
+            .hero-btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.85rem;
+            }
+
+            .content-layout {
+                min-height: auto;
+            }
+
+            .sidebar {
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: var(--sidebar-width);
+                max-width: 85vw;
+                transform: translateX(-100%);
+                border-radius: 0 16px 16px 0;
+                padding-top: calc(150px + env(safe-area-inset-top));
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+                box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            }
+
+            .sidebar-overlay {
+                display: block;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.3s;
+            }
+
+            .sidebar-overlay.active {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            .content-area {
+                margin-left: 0;
+                padding: 0.75rem;
+                width: 100%;
+            }
+
+            .row-section {
+                margin-bottom: 1.25rem;
+            }
+
+            .row-header {
+                margin-bottom: 0.5rem;
+            }
+
+            .row-header h2 {
+                font-size: 1rem;
+            }
+
+            .row-count {
+                font-size: 0.75rem;
+            }
+
+            .movie-row {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0.5rem;
+                padding: 0.25rem 0;
+                overflow-x: visible;
+                scroll-snap-type: none;
+            }
+
+            .movie-card {
+                width: 100%;
+                border-radius: 10px;
+            }
+
+            .movie-info {
+                padding: 0.5rem;
+            }
+
+            .movie-title {
+                font-size: 0.75rem;
+            }
+
+            .movie-remarks {
+                font-size: 0.65rem;
+            }
+
+            .api-badge {
+                font-size: 0.6rem;
+            }
+
+            .pagination {
+                gap: 0.3rem;
+                padding: 0.5rem 0 1rem;
+            }
+
+            .pagination button,
+            .pagination span {
+                padding: 0.45rem 0.75rem;
+                font-size: 0.8rem;
+            }
+
+            .detail-view {
+                width: 100%;
+                padding: 1rem 0.5rem 0.5rem;
+                margin-left: 0;
+            }
+
+            .detail-header {
+                gap: 0.5rem;
+                margin: 0.5rem 0 0.75rem;
+            }
+
+            .back-btn {
+                font-size: 0.9rem;
+            }
+
+            .playing-info {
+                font-size: 0.8rem;
+            }
+
+            .detail-player-wrapper {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.5rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .detail-player-container {
+                width: 100%;
+                min-height: auto;
+                aspect-ratio: auto;
+                height: auto;
+                border-radius: 10px;
+                padding-bottom: 0;
+            }
+
+            .video-player {
+                aspect-ratio: auto;
+                height: auto;
+                padding-bottom: 56.25%;
+                border-radius: 10px 10px 0 0;
+            }
+
+            .video-controls-bar {
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+
+            .video-controls-bar .btn {
+                flex: 1 1 0;
+                min-width: 0;
+                font-size: 0.8rem;
+                padding: 0.45rem 0.3rem;
+            }
+
+            /* 移动端强制用 padding-bottom 保持比例，避免部分安卓浏览器 aspect-ratio 计算异常 */
+            .movie-poster-wrapper {
+                aspect-ratio: auto;
+                height: auto;
+                padding-bottom: 150%;
+            }
+            .movie-poster-wrapper .movie-poster {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            .detail-playlist-container {
+                width: 100%;
+                max-height: 320px;
+                padding: 0.75rem;
+                border-radius: 10px;
+            }
+
+            .server-section {
+                margin-bottom: 0.75rem;
+                padding-bottom: 0.75rem;
+            }
+
+            .server-name {
+                font-size: 0.85rem;
+            }
+
+            .play-list {
+                gap: 5px;
+            }
+
+            .play-list li {
+                padding: 5px 9px;
+                font-size: 11px;
+            }
+
+.detail-info-container {
+                padding: 0.75rem;
+                border-radius: 10px;
+            }
+
+            .detail-poster-card {
+                width: 120px;
+                margin: 0 0.85rem 0.6rem 0;
+                padding: 6px;
+                border-radius: 10px;
+            }
+
+            .detail-poster-wrapper {
+                width: 100%;
+                aspect-ratio: auto;
+                height: auto;
+                padding-bottom: 150%;
+            }
+            .detail-poster-wrapper .detail-poster {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .detail-info h2 {
+                font-size: 0.95rem;
+                margin-bottom: 0.4rem;
+            }
+
+            .detail-meta {
+                grid-template-columns: 1fr;
+                gap: 0.25rem;
+                margin-bottom: 0.5rem;
+            }
+
+            .detail-meta p {
+                font-size: 0.75rem;
+            }
+
+            .detail-blurb {
+                font-size: 0.8rem;
+                line-height: 1.5;
+            }
+
+            .detail-blurb h3 {
+                font-size: 0.85rem;
+                margin-bottom: 0.3rem;
+            }
+
+            .modal {
+                padding: 0.75rem;
+            }
+
+            .modal-content {
+                border-radius: 10px;
+            }
+
+            .resume-play-btn {
+                right: 0.75rem;
+                bottom: 0.75rem;
+                padding: 0.65rem 1rem;
+                font-size: 0.85rem;
+            }
+        }
+
+        /* 平板及更小屏幕：播放器与选集上下堆叠，避免播放器被压小 */
+        @media (max-width: 1024px) {
+            .detail-player-wrapper {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .detail-player-container {
+                width: 100%;
+                min-height: auto;
+                aspect-ratio: auto;
+                height: auto;
+                border-radius: 10px;
+                padding-bottom: 0;
+                overflow: hidden;
+            }
+
+            .video-player {
+                aspect-ratio: auto;
+                height: auto;
+                padding-bottom: 56.25%;
+                border-radius: 10px 10px 0 0;
+                overflow: hidden;
+            }
+
+            .video-controls-bar {
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+
+            .video-controls-bar .btn {
+                flex: 1 1 0;
+                min-width: 0;
+                font-size: 0.8rem;
+                padding: 0.45rem 0.3rem;
+            }
+
+            .detail-playlist-container {
+                width: 100%;
+                max-height: 320px;
+                padding: 0.75rem;
+                border-radius: 10px;
+                overflow-x: hidden;
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .movie-row {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0.75rem;
+                padding: 0.5rem 0;
+                overflow-x: visible;
+                scroll-snap-type: none;
+            }
+
+            .movie-card {
+                width: 100%;
+            }
+        }
+
+        /* Android 低版本 WebView 兼容：flex gap 与 aspect-ratio 回退 */
+        .no-flex-gap .header-right > * + * { margin-left: 0.75rem; }
+        .no-flex-gap .movie-row > * + * { margin-left: 1rem; }
+        .no-flex-gap .pagination > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .hero-btn > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .history-item > * + * { margin-left: 0.75rem; }
+        .no-flex-gap .history-actions > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .back-btn > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .settings-form .btn-group > * + * { margin-left: 1rem; }
+        .no-flex-gap .resume-play-btn > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .server-name > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .server-actions > * + * { margin-left: 0.5rem; }
+        .no-flex-gap .detail-player-wrapper > * + * { margin-left: 1rem; }
+
+        /* 可换行 flex 容器：负 margin 模拟 gap */
+        .no-flex-gap .detail-header {
+            margin-top: 0.5rem;
+            margin-right: -0.5rem;
+            margin-bottom: 0.5rem;
+            margin-left: 0;
+        }
+        .no-flex-gap .detail-header > * {
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .no-flex-gap .playing-info {
+            margin: -0.2rem;
+        }
+        .no-flex-gap .playing-info > * {
+            margin: 0.2rem;
+        }
+        .no-flex-gap .play-list {
+            margin: -3px;
+        }
+        .no-flex-gap .play-list > * {
+            margin: 3px;
+        }
+
+        @media (max-width: 768px) {
+            .no-flex-gap .header {
+                margin: 0;
+            }
+            .no-flex-gap .header > * {
+                margin: 0;
+            }
+            .no-flex-gap .header-right > * + * {
+                margin-left: 0.5rem;
+            }
+            .no-flex-gap .pagination > * + * {
+                margin-left: 0.3rem;
+            }
+            .no-flex-gap .detail-header {
+                margin-right: -0.25rem;
+                margin-bottom: 0.75rem;
+            }
+            .no-flex-gap .detail-header > * {
+                margin-right: 0.25rem;
+                margin-bottom: 0.25rem;
+            }
+            .no-flex-gap .detail-player-wrapper > * + * {
+                margin-left: 0;
+                margin-top: 0.5rem;
+            }
+            .no-flex-gap .play-list {
+                margin: -2.5px;
+            }
+            .no-flex-gap .play-list > * {
+                margin: 2.5px;
+            }
+        }
+
+        @supports not (aspect-ratio: 2 / 3) {
+            .movie-poster-wrapper {
+                height: auto;
+                padding-bottom: 150%;
+            }
+            .movie-poster-wrapper .movie-poster {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+            .detail-poster-wrapper {
+                height: auto;
+                padding-bottom: 150%;
+            }
+            .detail-poster-wrapper .detail-poster {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+        }
+
+        @supports not (aspect-ratio: 16 / 9) {
+            .detail-player-container {
+                height: auto;
+                padding-bottom: 56.25%;
+            }
+            .detail-player-container .video-player {
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">千寻时光</div>
+    <header class="header">
+        <button class="menu-toggle" onclick="toggleMobileSidebar()" aria-label="打开分类">分类</button>
+        <div class="logo" onclick="loadMovies()">千寻时光</div>
         <div class="search-bar">
-            <input placeholder="搜索电影/剧集/演员...">
-            <button>搜索</button>
+            <input type="text" id="searchInput" placeholder="搜索电影、电视剧..." onkeypress="handleSearchKey(event)">
+            <button onclick="searchMovies()">搜索</button>
         </div>
-        <div class="header-right">
-            <div class="header-actions">
-                <button class="btn btn-home">首页</button>
-                <button class="btn btn-history">历史</button>
-                <a class="btn btn-shop" href="#">购买会员</a>
+        <div class="header-actions">
+            <button class="btn btn-home" onclick="goHome()">首页</button>
+            <button class="btn btn-history" onclick="openHistory()">播放记录</button>
+            <a class="btn btn-shop" id="shopBtn" href="#" target="_blank" rel="noopener noreferrer" style="display: none;">购买会员</a>
+            <button class="btn btn-settings" id="loginBtn" onclick="openSettings()">免费用户</button>
+        </div>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-title">接口源</div>
+            <div id="apiList"></div>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-title">分类</div>
+            <div id="categoryList"></div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div id="listView">
+            <section class="hero" id="heroSection" onclick="playHero()">
+                <div class="hero-overlay"></div>
+                <div class="loading">加载中</div>
+            </section>
+
+            <div class="content-layout">
+                <section class="content-area">
+                    <div class="row-section">
+                        <div class="row-header">
+                            <h2 id="rowTitle">全部影视</h2>
+                            <span class="row-count" id="totalCount"></span>
+                        </div>
+                        <div id="movieRow" class="movie-row">
+                            <div class="loading">加载中</div>
+                        </div>
+                    </div>
+                    <div class="pagination" id="pagination"></div>
+                </section>
+            </div>
+        </div>
+
+        <div id="detailView" class="detail-view">
+            <div class="detail-header">
+                <div class="back-btn" onclick="backToList()">
+                    <span>返回列表</span>
+                </div>
+                <div class="playing-info">
+                    <span id="playingMovieName"></span>
+                    <span id="playingEpisodeName" class="playing-episode"></span>
+                </div>
+            </div>
+            <div id="detailContent">
+                <div class="loading">加载中</div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('settingsModal')">&times;</button>
+            <form class="settings-form" id="loginForm" onsubmit="event.preventDefault(); login();">
+                <h3>登录</h3>
+                <div id="loginStatus" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 8px; font-size: 0.9rem;"></div>
+                <div class="form-group">
+                    <label for="username">账号</label>
+                    <input type="text" id="username" placeholder="请输入账号" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password">
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" type="submit">登录</button>
+                    <button class="btn btn-secondary" type="button" onclick="closeModal('settingsModal')">取消</button>
+                </div>
+                <p class="hint" style="margin-top: 1rem;">未登录用户仅能试用 1 小时，登录后可永久免费使用。</p>
+            </form>
+            <div class="settings-form" id="userInfoForm" style="display: none;">
+                <h3>已登录</h3>
+                <div id="userInfoStatus" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 8px; font-size: 0.9rem;"></div>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" onclick="logout()">退出登录</button>
+                    <button class="btn btn-secondary" onclick="closeModal('settingsModal')">关闭</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <main class="main-content">
-        <section class="hero active">
-            <img class="hero-bg" src="hero.jpg" alt="">
-            <div class="hero-overlay"></div>
-            <div class="hero-content">
-                <span class="hero-label">推荐</span>
-                <h1 class="hero-title">欢迎使用千寻时光</h1>
-                <p class="hero-desc">在这里可以查找并观看你喜欢的视频内容。</p>
-                <button class="hero-btn">立即播放</button>
-            </div>
-        </section>
-
-        <div class="content-layout">
-            <aside class="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-title">分类</div>
-                    <div class="category-item">电影</div>
-                    <div class="category-item">电视剧</div>
-                    <div class="category-item">综艺</div>
+    <div class="modal" id="loginRequiredModal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="settings-form" style="text-align: center;">
+                <h3>试用时间已到</h3>
+                <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">您的免费试用已结束，登录账号后即可永久免费使用。</p>
+                <div class="btn-group" style="justify-content: center;">
+                    <button class="btn btn-primary" onclick="closeModal('loginRequiredModal'); openSettings();">去登录</button>
                 </div>
-            </aside>
+            </div>
+        </div>
+    </div>
 
-            <section class="content-area">
-                <div class="row-section">
-                    <div class="row-header"><h2>热门</h2><div class="row-count">共 10 条</div></div>
-                    <div class="movie-row">
-                        <div class="movie-card">
-                            <div class="movie-poster-wrapper">
-                                <img class="movie-poster" src="poster1.jpg" alt="">
-                                <div class="poster-placeholder"><span>影</span></div>
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('historyModal')">&times;</button>
+            <div class="settings-form">
+                <h3>播放记录</h3>
+                <ul class="history-list" id="historyList"></ul>
+                <div class="history-actions" id="historyActions" style="display: none;">
+                    <button class="btn btn-secondary" onclick="clearHistory()">清空记录</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fallbackApis = [
+            { url: 'https://cj.lziapi.com/api.php/provide/vod/', name: 'Lziapi' },
+            { url: 'https://cj.rycjapi.com/api.php/provide/vod/', name: 'Rycjapi' },
+            { url: 'https://api.ffzyapi.com/api.php/provide/vod/', name: 'Ffzyapi' },
+            { url: 'https://155api.com/api.php/provide/vod/', name: '155api' }
+        ];
+
+        let apis = [];
+        let currentApiIndex = parseInt(localStorage.getItem('currentApiIndex')) || 0;
+
+        function setShopBtn(url) {
+            const btn = document.getElementById('shopBtn');
+            if (!btn) return;
+            if (url) {
+                btn.href = url;
+                btn.style.display = 'inline-flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+
+        async function initApis() {
+            const localApis = localStorage.getItem('movieApis');
+            if (localApis) {
+                try {
+                    apis = JSON.parse(localApis);
+                } catch (e) {
+                    apis = [];
+                }
+            }
+            let shopUrl = '';
+            try {
+                // 通过 admin/api.php 读取配置，这样读取的是 SQLite 数据库中的最新线路
+                const res = await fetch('/admin/api.php?action=get&_=' + Date.now(), {
+                    cache: 'no-store'
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.code === 0 && result.data) {
+                        if (Array.isArray(result.data.apis)) {
+                            apis = result.data.apis;
+                            localStorage.setItem('movieApis', JSON.stringify(apis));
+                        }
+                        shopUrl = result.data.shopUrl || '';
+                        trialDuration = (result.data.trialDuration || 60) * 60 * 1000; // 转换为毫秒
+                    }
+                }
+            } catch (e) {
+                console.error('加载服务器线路配置失败:', e);
+                // 备用：直接读取 JSON 文件
+                try {
+                    const res2 = await fetch('data/api-config.json?_=' + Date.now(), { cache: 'no-store' });
+                    if (res2.ok) {
+                        const config = await res2.json();
+                        if (config && Array.isArray(config.apis)) {
+                            apis = config.apis;
+                            localStorage.setItem('movieApis', JSON.stringify(apis));
+                        }
+                        if (config && config.shopUrl) shopUrl = config.shopUrl;
+                    }
+                } catch (e2) {
+                    console.error('备用读取线路配置失败:', e2);
+                }
+            }
+            setShopBtn(shopUrl);
+            if (!apis || apis.length === 0) {
+                apis = fallbackApis;
+            }
+            updateApiNames();
+            loadMovies();
+
+            // 从 IndexedDB 加载用户登录状态后再检查
+            await loadUserCache();
+            renderLoginStatus();
+            checkUserAccess(true);
+
+            // 注册全局声音解锁，解决安卓首次播放无声音
+            addGlobalUnmuteHandler();
+
+            // 已登录用户每 60 秒校验一次账号状态
+            setInterval(async () => {
+                if (isLoggedIn()) {
+                    await verifyUserWithServer();
+                }
+            }, 60000);
+        }
+
+        let categoriesByApi = {};
+        let currentPage = 1;
+        let currentType = 0;
+        let currentCategoryName = '全部影视';
+        let searchKeyword = '';
+        let currentHls = null;
+        let lazyLoadObserver = null;
+        let moviesCache = {};
+        let categoryMoviesCache = [];
+        let searchResultsCache = [];
+        let categoryCache = {};
+        let activeCategoryLoads = {};
+        const CATEGORY_CACHE_TTL = 60 * 60 * 1000;
+        const PAGE_SIZE = 21;
+        let currentVodId = 0;
+        let currentServerIndex = 0;
+        let currentEpisodeIndex = 0;
+        let currentEpisodeUrl = '';
+        let currentPlayAttemptServers = new Set();
+        let hasAutoRetriedCurrentEpisode = false;
+        let playbackState = null; // { vodId, serverIndex, episodeIndex, currentTime, movieName, episodeTitle }
+        let heroMovie = null;
+        const blockedServers = [];
+
+        function getDomainFromUrl(url) {
+            try {
+                const urlObj = new URL(url);
+                const domain = urlObj.hostname;
+                const parts = domain.split('.');
+                if (parts.length >= 2) {
+                    return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+                }
+                return domain;
+            } catch {
+                return '未知接口';
+            }
+        }
+
+        function updateApiNames() {
+            apis.forEach(api => {
+                if (api.name && (api.name.startsWith('接口') || api.name === '未知接口')) {
+                    api.name = getDomainFromUrl(api.url);
+                }
+            });
+            localStorage.setItem('movieApis', JSON.stringify(apis));
+        }
+
+        function getCurrentApi() {
+            return apis[currentApiIndex];
+        }
+
+        async function switchApi(index) {
+            currentApiIndex = index;
+            localStorage.setItem('currentApiIndex', index);
+            categoriesByApi = {};
+            moviesCache = {};
+            categoryMoviesCache = [];
+            searchResultsCache = [];
+            categoryCache = {};
+            activeCategoryLoads = {};
+            renderApiList();
+            await loadMovies(1, 0, '');
+        }
+
+        function normalizeUrl(url, apiIndex) {
+            if (!url) return '';
+            if (/^https?:\/\//i.test(url)) return url;
+            if (url.startsWith('//')) return 'https:' + url;
+
+            const index = (apiIndex !== undefined) ? apiIndex : currentApiIndex;
+            const apiUrl = apis[index]?.url || '';
+            const baseUrl = apiUrl.replace(/\/api\.php\/.*$/, '');
+            if (!baseUrl) return url;
+
+            if (url.startsWith('/')) {
+                return baseUrl + url;
+            }
+            return baseUrl + '/' + url;
+        }
+
+        function isLocalPreview() {
+    return window.location.hostname === 'localhost'
+        || window.location.hostname === '127.0.0.1'
+        || window.location.hostname.endsWith('.miaoda.ai')
+        || window.location.protocol === 'file:';
+}
+
+        function getProxyUrl(url) {
+            if (isLocalPreview() || !url) {
+                return url;
+            }
+
+            const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+            const ext = url.split('.').pop().toLowerCase().split('?')[0];
+            const isImage = imageExtensions.includes(ext) || /\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)/i.test(url);
+
+            const proxyUrl = `proxy.php?url=${encodeURIComponent(url)}`;
+            return isImage ? proxyUrl + '&_img=1' : proxyUrl;
+        }
+
+        function retryImageWithProxy(img) {
+            const originalSrc = img.getAttribute('data-original-src') || img.getAttribute('data-fallback-src');
+            if (originalSrc && !img.src.includes('?url=')) {
+                img.onerror = null;
+                img.src = getProxyUrl(originalSrc);
+            } else {
+                // 代理也失败，显示占位图
+                img.style.display = 'none';
+                const placeholder = img.parentElement.querySelector('.poster-placeholder');
+                if (placeholder) placeholder.classList.remove('hidden');
+            }
+        }
+
+        let imageLoadQueue = [];
+        const MAX_CONCURRENT_IMAGES = 3;
+        let imageLoadCount = 0;
+
+        function loadImageWithQueue(img, url, fallbackUrl) {
+            imageLoadQueue.push({ img, url, fallbackUrl });
+            processImageQueue();
+        }
+
+        function processImageQueue() {
+            while (imageLoadCount < MAX_CONCURRENT_IMAGES && imageLoadQueue.length > 0) {
+                const { img, url, fallbackUrl } = imageLoadQueue.shift();
+                imageLoadCount++;
+
+                const triedKey = '_triedUrls';
+                if (!img[triedKey]) img[triedKey] = new Set();
+                if (img[triedKey].has(url)) {
+                    imageLoadCount--;
+                    processImageQueue();
+                    continue;
+                }
+                img[triedKey].add(url);
+
+                const tempImg = new Image();
+                tempImg.onload = function() {
+                    img.src = url;
+                    img.classList.add('loaded');
+                    imageLoadCount--;
+                    processImageQueue();
+                };
+                tempImg.onerror = function() {
+                    imageLoadCount--;
+                    const isProxyUrl = url.includes('?url=');
+                    if (fallbackUrl && fallbackUrl !== url && !img[triedKey].has(fallbackUrl) && !isProxyUrl) {
+                        // 直连失败，回退到代理；代理失败不再回退直连，避免重复报错
+                        loadImageWithQueue(img, fallbackUrl);
+                    } else if (img.onerror) {
+                        // 代理也失败，触发外部错误处理
+                        img.onerror();
+                    }
+                    processImageQueue();
+                };
+                tempImg.src = url;
+            }
+        }
+
+        function createAbortSignal(timeoutMs) {
+            if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+                return AbortSignal.timeout(timeoutMs);
+            }
+            const controller = new AbortController();
+            setTimeout(() => controller.abort(), timeoutMs);
+            return controller.signal;
+        }
+
+        async function fetchData(action, params = {}, apiIndex = currentApiIndex) {
+            const api = apis[apiIndex];
+            if (!api) return { code: 0, msg: '接口不存在' };
+
+            let url = `${api.url}?ac=${action}`;
+            for (let key in params) {
+                url += `&${key}=${encodeURIComponent(params[key])}`;
+            }
+            try {
+                const targetUrl = isLocalPreview() ? url : `proxy.php?url=${encodeURIComponent(url)}`;
+                console.log('请求URL:', url);
+                const response = await fetch(targetUrl);
+                const jsonData = await response.json();
+                return jsonData;
+            } catch (error) {
+                console.error('请求失败:', error);
+                return { code: 0, msg: '请求失败' };
+            }
+        }
+
+        function getTargetTypeIds(typeId) {
+            const typeIdStr = String(typeId);
+            const currentCategories = categoriesByApi[currentApiIndex] || [];
+            const childTypeIds = currentCategories
+                .filter(c => String(c.type_pid) === typeIdStr)
+                .map(c => String(c.type_id));
+            return [...new Set([typeIdStr, ...childTypeIds])];
+        }
+
+        async function filterMoviesByCategory(typeId) {
+            const cacheKey = `${currentApiIndex}-${typeId}`;
+            const cached = categoryCache[cacheKey];
+            if (cached && Date.now() - cached.timestamp < CATEGORY_CACHE_TTL) {
+                // 缓存命中，后台补充加载更多页（如果还没加载完）
+                loadMoreCategoryPages(typeId);
+                return cached.data;
+            }
+
+            const targetTypeIds = getTargetTypeIds(typeId);
+            const seenIds = new Set();
+            const allMovies = [];
+            const currentCategories = categoriesByApi[currentApiIndex] || [];
+            const hasChildren = currentCategories.some(c => String(c.type_pid) === String(typeId));
+
+            function addMovies(list) {
+                list.forEach(movie => {
+                    const uniqueId = `${currentApiIndex}-${movie.vod_id}`;
+                    if (!seenIds.has(uniqueId)) {
+                        seenIds.add(uniqueId);
+                        movie._apiIndex = currentApiIndex;
+                        movie._uniqueId = uniqueId;
+                        moviesCache[uniqueId] = movie;
+                        allMovies.push(movie);
+                    }
+                });
+            }
+
+            if (hasChildren && targetTypeIds.length > 1) {
+                // 有子分类：并行加载每个子分类的第一页，快速展示
+                const responses = await Promise.all(
+                    targetTypeIds.map(tid => fetchData('list', { pg: 1, t: tid }, currentApiIndex))
+                );
+                responses.forEach(data => {
+                    if (data.code === 1 && data.list && data.list.length > 0) {
+                        addMovies(data.list);
+                    }
+                });
+                categoryCache[cacheKey] = { data: allMovies, timestamp: Date.now(), totalPages: 10 };
+                // 后台继续加载更多页
+                loadMoreCategoryPages(typeId);
+                return categoryCache[cacheKey].data;
+            }
+
+            // 无子分类：并行加载前两页，立即返回展示
+            const [page1Data, page2Data] = await Promise.all([
+                fetchData('list', { pg: 1, t: typeId }, currentApiIndex),
+                fetchData('list', { pg: 2, t: typeId }, currentApiIndex)
+            ]);
+
+            if (page1Data.code === 1 && page1Data.list && page1Data.list.length > 0) {
+                addMovies(page1Data.list);
+            }
+            if (page2Data.code === 1 && page2Data.list && page2Data.list.length > 0) {
+                addMovies(page2Data.list);
+            }
+
+            const totalPages = (page1Data.code === 1 && page1Data.pagecount)
+                ? parseInt(page1Data.pagecount) || 1
+                : 1;
+
+            categoryCache[cacheKey] = { data: allMovies, timestamp: Date.now(), totalPages };
+            loadMoreCategoryPages(typeId);
+            return categoryCache[cacheKey].data;
+        }
+
+        async function loadMoreCategoryPages(typeId, knownTotalPages) {
+            const cacheKey = `${currentApiIndex}-${typeId}`;
+            if (activeCategoryLoads[cacheKey]) return;
+            activeCategoryLoads[cacheKey] = true;
+
+            try {
+                const targetTypeIds = getTargetTypeIds(typeId);
+                const currentCategories = categoriesByApi[currentApiIndex] || [];
+                const hasChildren = currentCategories.some(c => String(c.type_pid) === String(typeId));
+                const cached = categoryCache[cacheKey];
+                if (!cached) return;
+
+                const seenIds = new Set(cached.data.map(m => m._uniqueId));
+                const newMovies = [];
+
+                function addMovies(list) {
+                    list.forEach(movie => {
+                        const uniqueId = `${currentApiIndex}-${movie.vod_id}`;
+                        if (!seenIds.has(uniqueId)) {
+                            seenIds.add(uniqueId);
+                            movie._apiIndex = currentApiIndex;
+                            movie._uniqueId = uniqueId;
+                            moviesCache[uniqueId] = movie;
+                            newMovies.push(movie);
+                        }
+                    });
+                }
+
+                if (hasChildren && targetTypeIds.length > 1) {
+                    for (const tid of targetTypeIds) {
+                        for (let page = 2; page <= 10; page++) {
+                            const data = await fetchData('list', { pg: page, t: tid }, currentApiIndex);
+                            if (data.code !== 1 || !data.list || data.list.length === 0) break;
+                            addMovies(data.list);
+                        }
+                    }
+                } else {
+                    const totalPages = (knownTotalPages > 2)
+                        ? knownTotalPages
+                        : (cached.totalPages > 2 ? cached.totalPages : 1);
+                    const maxPage = Math.min(totalPages, 50);
+
+                    // 先并行加载第3-5页，让用户翻页更流畅
+                    const batchStart = 3;
+                    const batchEnd = Math.min(5, maxPage);
+                    if (batchStart <= batchEnd) {
+                        const batchPromises = [];
+                        for (let page = batchStart; page <= batchEnd; page++) {
+                            batchPromises.push(fetchData('list', { pg: page, t: typeId }, currentApiIndex));
+                        }
+                        const batchResults = await Promise.all(batchPromises);
+                        batchResults.forEach(data => {
+                            if (data.code === 1 && data.list && data.list.length > 0) {
+                                addMovies(data.list);
+                            }
+                        });
+                    }
+
+                    // 后续页面串行加载，避免对源站造成过大压力
+                    for (let page = 6; page <= maxPage; page++) {
+                        const data = await fetchData('list', { pg: page, t: typeId }, currentApiIndex);
+                        if (data.code !== 1 || !data.list || data.list.length === 0) break;
+                        addMovies(data.list);
+                    }
+                }
+
+                if (newMovies.length > 0) {
+                    cached.data.push(...newMovies);
+                    cached.timestamp = Date.now();
+                    if (String(currentType) === String(typeId)) {
+                        // 当前正在查看该分类，更新分页总数
+                        renderPagination(currentPage, Math.ceil(cached.data.length / PAGE_SIZE), cached.data.length);
+                    }
+                }
+            } catch (error) {
+                console.error('后台加载分类数据失败:', error);
+            } finally {
+                delete activeCategoryLoads[cacheKey];
+            }
+        }
+
+        async function loadMovies(page = 1, type = 0, keyword = '') {
+            currentPage = page;
+            currentType = type;
+            searchKeyword = keyword;
+            searchResultsCache = [];
+            heroMovie = null;
+
+            closeMobileSidebar();
+            showListView();
+            renderSidebar();
+
+            const movieRow = document.getElementById('movieRow');
+            movieRow.innerHTML = '<div class="loading">加载中</div>';
+            document.getElementById('heroSection').classList.remove('active');
+
+            const currentCategories = categoriesByApi[currentApiIndex] || [];
+            const category = currentCategories.find(c => String(c.type_id) === String(type));
+            currentCategoryName = type === 0 ? '全部影视' : (category ? category.type_name : '分类影视');
+
+            if (type > 0) {
+                if (page === 1) {
+                    categoryMoviesCache = await filterMoviesByCategory(type);
+                }
+
+                const start = (page - 1) * PAGE_SIZE;
+                const end = start + PAGE_SIZE;
+                const pageMovies = categoryMoviesCache.slice(start, end);
+
+                renderMovies(pageMovies);
+                renderPagination(page, Math.ceil(categoryMoviesCache.length / PAGE_SIZE), categoryMoviesCache.length);
+                await fetchMovieDetails(pageMovies);
+                if (page === 1 && pageMovies.length > 0) renderHero(findTopRatedMovie(pageMovies));
+                return;
+            }
+
+            categoryMoviesCache = [];
+
+            const params = { pg: page, ps: PAGE_SIZE };
+            if (keyword) params.wd = keyword;
+
+            let data = await fetchData('list', params, currentApiIndex);
+
+            // 首页第一页若接口不支持 ps 参数导致返回不足 21 条，尝试再取下一页补足
+            if (data.code === 1 && page === 1 && !keyword && data.list && data.list.length > 0 && data.list.length < PAGE_SIZE && data.pagecount > 1) {
+                const needed = PAGE_SIZE - data.list.length;
+                const page2 = await fetchData('list', { pg: page + 1 }, currentApiIndex);
+                if (page2.code === 1 && page2.list && page2.list.length > 0) {
+                    data.list.push(...page2.list.slice(0, needed));
+                }
+            }
+
+            if (data.code === 1) {
+                moviesCache = {};
+                data.list.forEach(movie => {
+                    movie._apiIndex = currentApiIndex;
+                    movie._uniqueId = `${currentApiIndex}-${movie.vod_id}`;
+                    moviesCache[movie._uniqueId] = movie;
+                });
+
+                renderMovies(data.list);
+                renderPagination(data.page, data.pagecount, data.total);
+                if (data.class) {
+                    categoriesByApi[currentApiIndex] = data.class;
+                    renderSidebar();
+                }
+                await fetchMovieDetails(data.list);
+                if (data.list.length > 0) renderHero(findTopRatedMovie(data.list));
+            } else {
+                movieRow.innerHTML = '<div class="empty-state">加载失败，请检查接口</div>';
+            }
+        }
+
+        async function fetchMovieDetails(movies) {
+            const moviesByApi = {};
+            movies.forEach(movie => {
+                const apiIndex = movie._apiIndex || currentApiIndex;
+                if (!moviesByApi[apiIndex]) {
+                    moviesByApi[apiIndex] = [];
+                }
+                moviesByApi[apiIndex].push(movie);
+            });
+
+            for (const apiIndex in moviesByApi) {
+                const apiMovies = moviesByApi[apiIndex];
+                const ids = apiMovies.map(m => m.vod_id);
+                const batchSize = 5;
+
+                for (let i = 0; i < ids.length; i += batchSize) {
+                    const batchIds = ids.slice(i, i + batchSize).join(',');
+                    try {
+                        const data = await fetchData('detail', { ids: batchIds }, parseInt(apiIndex));
+                        if (data.code === 1 && data.list) {
+                            data.list.forEach(movie => {
+                                const uniqueId = `${apiIndex}-${movie.vod_id}`;
+                                if (moviesCache[uniqueId]) {
+                                    Object.assign(moviesCache[uniqueId], movie);
+                                    if (movie.vod_play_url) {
+                                        moviesCache[uniqueId]._hasPlayUrl = true;
+                                    }
+                                } else {
+                                    movie._apiIndex = parseInt(apiIndex);
+                                    movie._uniqueId = uniqueId;
+                                    moviesCache[uniqueId] = movie;
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.error('获取详情失败:', error);
+                    }
+                }
+            }
+            updateMovieImages();
+        }
+
+        function updateMovieImages() {
+            document.querySelectorAll('.movie-card').forEach(card => {
+                const vodId = card.dataset.vodId;
+                const cachedMovie = moviesCache[vodId];
+                if (cachedMovie && cachedMovie.vod_pic) {
+                    const img = card.querySelector('.movie-poster');
+                    const placeholder = card.querySelector('.poster-placeholder');
+                    if (img && (!img.src || img.src === window.location.href || img.src.indexOf('data:') === 0)) {
+                        const apiIndex = cachedMovie._apiIndex !== undefined ? cachedMovie._apiIndex : currentApiIndex;
+                        const picUrl = normalizeUrl(cachedMovie.vod_pic, apiIndex);
+                        const posterUrl = getProxyUrl(picUrl);
+                        img.setAttribute('data-src', picUrl);
+                        img.setAttribute('data-fallback-src', posterUrl);
+                        img.setAttribute('data-original-src', picUrl);
+                        img.onload = function() {
+                            img.classList.add('loaded');
+                            placeholder.classList.add('hidden');
+                        };
+                        img.onerror = function() {
+                            retryImageWithProxy(img);
+                        };
+                        // 优先走代理，避免直连被拒/超时等网络错误刷屏
+                        loadImageWithQueue(img, posterUrl, picUrl);
+                    }
+                }
+            });
+
+            if (heroMovie && heroMovie.vod_pic) {
+                const heroBg = document.getElementById('heroBg');
+                if (heroBg && (!heroBg.src || heroBg.src === window.location.href)) {
+                    const heroApiIndex = heroMovie._apiIndex !== undefined ? heroMovie._apiIndex : currentApiIndex;
+                    const picUrl = normalizeUrl(heroMovie.vod_pic, heroApiIndex);
+                    // 优先走代理，避免直连被拒/超时等网络错误刷屏
+                    heroBg.src = getProxyUrl(picUrl);
+                    heroBg.onerror = function() {
+                        heroBg.style.display = 'none';
+                    };
+                }
+            }
+        }
+
+        function getMovieScore(movie) {
+            const scoreFields = ['vod_score', 'vod_douban_score', 'score'];
+            for (const field of scoreFields) {
+                const val = movie[field];
+                if (val !== undefined && val !== null && val !== '') {
+                    const parsed = parseFloat(val);
+                    if (!isNaN(parsed) && parsed > 0) return parsed;
+                }
+            }
+            return 0;
+        }
+
+        function findTopRatedMovie(movies) {
+            if (!movies || movies.length === 0) return null;
+            return movies.reduce((best, movie) => {
+                return getMovieScore(movie) > getMovieScore(best) ? movie : best;
+            });
+        }
+
+        function renderHero(movie) {
+            if (!movie) return;
+            heroMovie = movie;
+            const heroSection = document.getElementById('heroSection');
+            heroSection.classList.add('active');
+
+            const apiIndex = movie._apiIndex !== undefined ? movie._apiIndex : currentApiIndex;
+            const picUrl = normalizeUrl(movie.vod_pic, apiIndex);
+
+            heroSection.innerHTML = `
+                <img class="hero-bg" id="heroBg" src="${picUrl ? getProxyUrl(picUrl) : ''}" alt="${movie.vod_name}" data-original-src="${picUrl || ''}" onerror="this.style.display='none';">
+                <div class="hero-overlay"></div>
+                <div class="hero-content">
+                    <div class="hero-label">${movie.type_name || '精选'}</div>
+                    <h1 class="hero-title">${movie.vod_name}</h1>
+                    <div class="hero-meta">
+                        <span>${movie.vod_year || ''}</span>
+                        <span>${movie.vod_area || ''}</span>
+                        <span>${movie.vod_remarks || ''}</span>
+                    </div>
+                    <p class="hero-desc">${movie.vod_blurb || '暂无简介'}</p>
+                    <button class="hero-btn">立即播放</button>
+                </div>
+            `;
+        }
+
+        function playHero() {
+            if (heroMovie && heroMovie._uniqueId) {
+                showDetail(heroMovie._uniqueId);
+            }
+        }
+
+        function renderMovies(movies) {
+            const movieRow = document.getElementById('movieRow');
+
+            if (!movies || movies.length === 0) {
+                movieRow.innerHTML = '<div class="empty-state">暂无数据</div>';
+                return;
+            }
+
+            movieRow.innerHTML = movies.map(movie => {
+                const cachedMovie = moviesCache[movie._uniqueId] || movie;
+                const hasPoster = cachedMovie.vod_pic && cachedMovie.vod_pic.trim() !== '';
+                const apiIndex = movie._apiIndex !== undefined ? movie._apiIndex : currentApiIndex;
+                const apiName = apis[apiIndex] ? apis[apiIndex].name : '未知接口';
+                let picUrl = normalizeUrl(cachedMovie.vod_pic, apiIndex);
+                const posterUrl = hasPoster ? getProxyUrl(picUrl) : '';
+                return `
+                <div class="movie-card" onclick="showDetail('${movie._uniqueId || movie.vod_id}')" data-vod-id="${movie._uniqueId || movie.vod_id}">
+                    <div class="movie-poster-wrapper">
+                        <img class="movie-poster lazy" ${hasPoster ? `data-src="${picUrl}" data-fallback-src="${posterUrl}" data-original-src="${picUrl}"` : ''} alt="${cachedMovie.vod_name}" onerror="this.style.display='none';this.parentElement.querySelector('.poster-placeholder').classList.remove('hidden');">
+                        <div class="poster-placeholder${hasPoster ? ' hidden' : ''}">
+                            <span>${cachedMovie.vod_name.charAt(0)}</span>
+                        </div>
+                    </div>
+                    <div class="movie-info">
+                        <div class="movie-title">${cachedMovie.vod_name}</div>
+                        <div class="movie-remarks">${cachedMovie.vod_remarks || cachedMovie.type_name || ''}</div>
+                        <div class="api-badge">${apiName}</div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+
+            initLazyLoad();
+        }
+
+        function initLazyLoad() {
+            if (lazyLoadObserver) {
+                lazyLoadObserver.disconnect();
+            }
+
+            const lazyImages = document.querySelectorAll('.movie-poster.lazy');
+
+            if ('IntersectionObserver' in window) {
+                lazyLoadObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            loadLazyImage(entry.target);
+                            lazyLoadObserver.unobserve(entry.target);
+                        }
+                    });
+                }, {
+                    rootMargin: '100px',
+                    threshold: 0.1
+                });
+
+                lazyImages.forEach(img => {
+                    lazyLoadObserver.observe(img);
+                });
+            } else {
+                lazyImages.forEach(img => {
+                    loadLazyImage(img);
+                });
+            }
+        }
+
+        function loadLazyImage(img) {
+            const src = img.getAttribute('data-src');
+            const fallbackSrc = img.getAttribute('data-fallback-src');
+            if (src) {
+                img.onload = function() {
+                    img.classList.add('loaded');
+                    const placeholder = img.parentElement.querySelector('.poster-placeholder');
+                    if (placeholder) {
+                        placeholder.classList.add('hidden');
+                    }
+                };
+                img.onerror = function() {
+                    retryImageWithProxy(img);
+                };
+                // 优先走代理，避免直连被拒/超时等网络错误刷屏
+                loadImageWithQueue(img, fallbackSrc, src);
+                img.removeAttribute('data-src');
+            }
+        }
+
+        function goToPage(page) {
+            if (currentType === -1 && searchKeyword) {
+                searchMovies(page);
+            } else {
+                loadMovies(page, currentType, '');
+            }
+        }
+
+        function renderPagination(page, pagecount, total) {
+            const pagination = document.getElementById('pagination');
+            const totalCount = document.getElementById('totalCount');
+
+            totalCount.textContent = `共 ${total} 部`;
+
+            if (pagecount <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = `
+                <button onclick="goToPage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>上一页</button>
+                <span>第 ${page} / ${pagecount} 页</span>
+                <button onclick="goToPage(${page + 1})" ${page >= pagecount ? 'disabled' : ''}>下一页</button>
+            `;
+            pagination.innerHTML = html;
+        }
+
+        function renderSidebar() {
+            renderApiList();
+            renderCategories();
+        }
+
+        function renderApiList() {
+            const apiList = document.getElementById('apiList');
+            apiList.innerHTML = apis.map((api, index) => `
+                <div class="api-item ${index === currentApiIndex ? 'active' : ''}" onclick="switchApi(${index})">
+                    <span>${api.name || api.url}</span>
+                    <span class="api-status"></span>
+                </div>
+            `).join('');
+        }
+
+        function renderCategories() {
+            const categoryList = document.getElementById('categoryList');
+            const currentCategories = categoriesByApi[currentApiIndex] || [];
+            const mainCategories = currentCategories.filter(c => String(c.type_pid) === '0');
+
+            let html = `
+                <div class="category-item ${currentType === 0 ? 'active' : ''}" onclick="loadMovies(1, 0, '')">
+                    <span>全部影视</span>
+                </div>
+            `;
+
+            mainCategories.forEach(cat => {
+                const subCategories = currentCategories.filter(c => String(c.type_pid) === String(cat.type_id));
+                const hasSubs = subCategories.length > 0;
+                const isExpanded = hasSubs && (currentType === cat.type_id || subCategories.some(s => String(s.type_id) === String(currentType)));
+
+                html += `
+                    <div class="category-item ${currentType === cat.type_id ? 'active' : ''} ${isExpanded ? 'expanded' : ''}" onclick="toggleCategory(this, ${cat.type_id})">
+                        <span>${cat.type_name}</span>
+                        ${hasSubs ? '<span class="category-arrow">▶</span>' : ''}
+                    </div>
+                `;
+
+                if (hasSubs) {
+                    html += `
+                        <div class="subcategory-list ${isExpanded ? 'active' : ''}" data-parent="${cat.type_id}">
+                            ${subCategories.map(sub => `
+                                <div class="subcategory-item ${String(currentType) === String(sub.type_id) ? 'active' : ''}" onclick="event.stopPropagation(); loadMovies(1, ${sub.type_id}, '')">
+                                    ${sub.type_name}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            });
+
+            categoryList.innerHTML = html;
+        }
+
+        function toggleCategory(el, typeId) {
+            const currentCategories = categoriesByApi[currentApiIndex] || [];
+            const subCategories = currentCategories.filter(c => String(c.type_pid) === String(typeId));
+
+            if (subCategories.length === 0) {
+                loadMovies(1, typeId, '');
+                return;
+            }
+
+            // 如果当前已经是这个分类，则切换展开/收起
+            if (String(currentType) === String(typeId)) {
+                el.classList.toggle('expanded');
+                const subList = el.nextElementSibling;
+                if (subList && subList.classList.contains('subcategory-list')) {
+                    subList.classList.toggle('active');
+                }
+            } else {
+                // 加载父分类所有影片，并展开子分类
+                loadMovies(1, typeId, '');
+            }
+        }
+
+        async function searchMovies(page = 1) {
+            const keyword = document.getElementById('searchInput').value.trim();
+            currentType = -1;
+            searchKeyword = keyword;
+            closeMobileSidebar();
+            showListView();
+
+            const movieRow = document.getElementById('movieRow');
+            movieRow.innerHTML = '<div class="loading">加载中...</div>';
+            document.getElementById('heroSection').classList.remove('active');
+
+            if (!keyword) {
+                loadMovies(1, 0, '');
+                document.getElementById('rowTitle').textContent = '全部影视';
+                return;
+            }
+
+            document.getElementById('rowTitle').textContent = `搜索: ${keyword}`;
+
+            if (page === 1 || searchResultsCache.length === 0) {
+                const promises = apis.map((_, index) =>
+                    fetchData('list', { pg: 1, wd: keyword }, index)
+                );
+
+                const results = await Promise.allSettled(promises);
+                const allMovies = [];
+
+                results.forEach((result, index) => {
+                    if (result.status === 'fulfilled' && result.value && result.value.code === 1 && result.value.list) {
+                        try {
+                            result.value.list.forEach(movie => {
+                                movie._apiIndex = index;
+                                movie._uniqueId = `${index}-${movie.vod_id}`;
+                                allMovies.push(movie);
+                                moviesCache[movie._uniqueId] = movie;
+                            });
+                        } catch (e) {
+                            console.error('处理搜索结果失败:', e);
+                        }
+                    }
+                });
+
+                const seenIds = new Set();
+                searchResultsCache = allMovies.filter(movie => {
+                    if (!movie || !movie._uniqueId) return false;
+                    if (seenIds.has(movie._uniqueId)) return false;
+                    seenIds.add(movie._uniqueId);
+                    return true;
+                });
+
+                searchResultsCache.sort((a, b) => {
+                    const nameA = (a.vod_name || '').toLowerCase();
+                    const nameB = (b.vod_name || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+            }
+
+            currentPage = page;
+            const total = searchResultsCache.length;
+            const pagecount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            const start = (page - 1) * PAGE_SIZE;
+            const pageMovies = searchResultsCache.slice(start, start + PAGE_SIZE);
+
+            renderMovies(pageMovies);
+            renderPagination(page, pagecount, total);
+            renderSidebar();
+
+            if (pageMovies.length > 0) {
+                try {
+                    await fetchMovieDetails(pageMovies);
+                } catch (e) {
+                    console.error('获取详情失败:', e);
+                }
+            }
+        }
+
+        function handleSearchKey(event) {
+            if (event.key === 'Enter') {
+                searchMovies(1);
+            }
+        }
+
+        function showListView() {
+            stopPlayback(true);
+
+            document.getElementById('listView').style.display = 'block';
+            const detailView = document.getElementById('detailView');
+            detailView.classList.remove('active');
+            detailView.style.display = 'none';
+            closeMobileSidebar();
+            updateResumeButton();
+        }
+
+        function stopPlayback(saveState = false) {
+            const videoPlayer = document.getElementById('videoPlayer');
+            const video = videoPlayer ? videoPlayer.querySelector('video') : null;
+            const iframe = videoPlayer ? videoPlayer.querySelector('iframe') : null;
+
+            if (saveState && currentVodId && (video || iframe)) {
+                const movie = moviesCache[currentVodId];
+                playbackState = {
+                    vodId: currentVodId,
+                    serverIndex: currentServerIndex,
+                    episodeIndex: currentEpisodeIndex,
+                    currentTime: video ? (video.currentTime || 0) : 0,
+                    movieName: movie ? (movie.vod_name || '') : '',
+                    episodeTitle: document.getElementById('playingEpisodeName')?.textContent?.replace(' · ', '') || ''
+                };
+            }
+
+            if (video) {
+                video.pause();
+                video.src = '';
+                video.load();
+            }
+            if (iframe) {
+                iframe.src = 'about:blank';
+            }
+            if (videoPlayer) {
+                videoPlayer.innerHTML = '<div class="placeholder">加载中...</div>';
+            }
+
+            if (currentHls) {
+                currentHls.destroy();
+                currentHls = null;
+            }
+        }
+
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (!sidebar || !overlay) return;
+
+            const isOpen = sidebar.classList.contains('mobile-open');
+            if (isOpen) {
+                closeMobileSidebar();
+            } else {
+                sidebar.classList.add('mobile-open');
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (!sidebar || !overlay) return;
+
+            sidebar.classList.remove('mobile-open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function showDetailView() {
+            closeMobileSidebar();
+            document.getElementById('listView').style.display = 'none';
+            const detailView = document.getElementById('detailView');
+            detailView.style.display = 'block';
+            detailView.classList.add('active');
+
+            const resumeBtn = document.getElementById('resumePlayBtn');
+            if (resumeBtn) resumeBtn.style.display = 'none';
+        }
+
+        function backToList() {
+            showListView();
+        }
+
+        function updateResumeButton() {
+            const btn = document.getElementById('resumePlayBtn');
+            if (!btn) return;
+
+            if (playbackState && playbackState.vodId) {
+                const text = btn.querySelector('.resume-play-text');
+                if (text) {
+                    const name = playbackState.movieName || '继续播放';
+                    text.textContent = name;
+                }
+                btn.style.display = 'flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+
+        function resumePlayback() {
+            if (!playbackState || !playbackState.vodId) return;
+
+            const state = playbackState;
+            const resumeBtn = document.getElementById('resumePlayBtn');
+            if (resumeBtn) resumeBtn.style.display = 'none';
+
+            // 重新打开详情页
+            showDetail(state.vodId).then(() => {
+                // 详情页渲染完成后，播放对应剧集并跳转进度
+                const movie = moviesCache[state.vodId];
+                if (movie && movie._playServers && movie._playServers[state.serverIndex]) {
+                    const episodes = [];
+                    movie._playServers[state.serverIndex].split('#').forEach((ep, i) => {
+                        if (!ep.trim()) return;
+                        const parsed = parseEpisode(ep, i);
+                        if (parsed && parsed.url) episodes.push(parsed);
+                    });
+
+                    if (episodes[state.episodeIndex]) {
+                        // 成功恢复，清除状态
+                        playbackState = null;
+                        playVideo(episodes[state.episodeIndex].url, state.serverIndex, state.episodeIndex);
+
+                        // 恢复进度
+                        if (state.currentTime > 0) {
+                            const waitForVideo = setInterval(() => {
+                                const video = document.getElementById('mainVideo');
+                                if (video && video.readyState >= 1) {
+                                    video.currentTime = state.currentTime;
+                                    clearInterval(waitForVideo);
+                                }
+                            }, 200);
+                            setTimeout(() => clearInterval(waitForVideo), 5000);
+                        }
+                    } else {
+                        // 剧集不存在，恢复按钮
+                        updateResumeButton();
+                    }
+                } else {
+                    // 资源不存在，恢复按钮
+                    updateResumeButton();
+                }
+            }).catch(() => {
+                // 打开失败，恢复按钮
+                updateResumeButton();
+            });
+        }
+
+        function clearPlaybackState() {
+            playbackState = null;
+            updateResumeButton();
+        }
+
+        async function showDetail(vodId) {
+            currentVodId = vodId;
+            showDetailView();
+
+            const detailContent = document.getElementById('detailContent');
+            detailContent.innerHTML = '<div class="loading">加载中</div>';
+
+            let actualVodId = vodId;
+            let apiIndex = currentApiIndex;
+
+            if (vodId.includes('-')) {
+                const parts = vodId.split('-');
+                apiIndex = parseInt(parts[0]);
+                actualVodId = parseInt(parts[1]);
+            }
+
+            const cachedMovie = moviesCache[vodId];
+            let mergedMovie = cachedMovie ? { ...cachedMovie } : {};
+            mergedMovie._apiIndex = apiIndex;
+
+            try {
+                const detailData = await fetchData('detail', { ids: actualVodId }, apiIndex);
+                if (detailData.code === 1 && detailData.list && detailData.list.length > 0) {
+                    const detailMovie = detailData.list[0];
+                    Object.assign(mergedMovie, detailMovie);
+                    if (moviesCache[vodId]) {
+                        Object.assign(moviesCache[vodId], detailMovie);
+                    } else {
+                        moviesCache[vodId] = detailMovie;
+                    }
+                }
+            } catch (error) {
+                console.error('获取详情失败:', error);
+            }
+
+            // 如果当前接口没有播放地址，尝试其他接口聚合
+            if (!mergedMovie.vod_play_url) {
+                const results = await Promise.allSettled(
+                    apis.map((_, index) => fetchData('detail', { ids: actualVodId }, index))
+                );
+
+                const playUrls = [];
+                const playFroms = [];
+
+                results.forEach((result, index) => {
+                    if (result.status === 'fulfilled' && result.value.code === 1 && result.value.list && result.value.list.length > 0) {
+                        const movie = result.value.list[0];
+                        if (index === apiIndex) return;
+
+                        if (movie.vod_play_url) {
+                            parsePlayServers(movie, index, playUrls, playFroms);
+                        }
+                    }
+                });
+
+                if (playUrls.length > 0) {
+                    mergedMovie.vod_play_url = playUrls.join('$$$');
+                    mergedMovie.vod_play_from = playFroms.join('$$$');
+                    if (moviesCache[vodId]) {
+                        moviesCache[vodId].vod_play_url = mergedMovie.vod_play_url;
+                        moviesCache[vodId].vod_play_from = mergedMovie.vod_play_from;
+                    }
+                }
+            }
+
+            renderDetail(mergedMovie);
+        }
+
+        function parsePlayServers(movie, apiIndex, playUrls, playFroms) {
+            if (!movie.vod_play_url) return;
+            const servers = movie.vod_play_url.split('$$$');
+            const names = movie.vod_play_from ? movie.vod_play_from.split('$$$') : [];
+
+            servers.forEach((serverUrls, i) => {
+                const serverName = names[i] || '';
+                const isBlocked = blockedServers.some(blocked =>
+                    serverName.toLowerCase().includes(blocked.toLowerCase())
+                );
+                if (!isBlocked && serverUrls.trim()) {
+                    const prefix = apiIndex + 1;
+                    const newServerName = serverName ? `${prefix}-${serverName}` : `线路${prefix}`;
+                    playUrls.push(serverUrls);
+                    playFroms.push(newServerName);
+                }
+            });
+        }
+
+        function renderDetail(movie) {
+            const detailContent = document.getElementById('detailContent');
+
+            // 设置头部片名
+            const movieNameEl = document.getElementById('playingMovieName');
+            if (movieNameEl) movieNameEl.textContent = movie.vod_name || '';
+            const episodeNameEl = document.getElementById('playingEpisodeName');
+            if (episodeNameEl) episodeNameEl.textContent = '';
+
+            detailContent.innerHTML = `
+                <div class="detail-player-wrapper">
+                    <div class="detail-player-container">
+                        <div class="video-player" id="videoPlayer">
+                            <div class="placeholder">请选择剧集播放</div>
+                        </div>
+                    </div>
+                    <div class="detail-playlist-container" id="playlistContainer">
+                        <div id="allServers"></div>
+                    </div>
+                </div>
+                <div class="video-controls-bar" id="videoControlsBar">
+                    <button class="btn btn-prev" type="button" id="btnPrevEpisode">上一集</button>
+                    <button class="btn btn-next" type="button" id="btnNextEpisode">下一集</button>
+                </div>
+                <div class="detail-info-container">
+                    <div class="detail-poster-card">
+                        <div class="detail-poster-wrapper">
+                            <img class="detail-poster" src="${movie.vod_pic ? getProxyUrl(normalizeUrl(movie.vod_pic, movie._apiIndex)) : ''}" data-original-src="${movie.vod_pic ? normalizeUrl(movie.vod_pic, movie._apiIndex) : ''}" alt="${movie.vod_name}" style="display: ${movie.vod_pic ? 'block' : 'none'};" onerror="this.style.display='none';">
+                            <div class="poster-placeholder" style="display: ${movie.vod_pic ? 'none' : 'flex'};">
+                                <span>${movie.vod_name.charAt(0)}</span>
                             </div>
-                            <div class="movie-info"><div class="movie-title">示例电影</div><div class="movie-remarks">简介 ...</div></div>
+                        </div>
+                    </div>
+                    <div class="detail-info">
+                        <h2>${movie.vod_name}</h2>
+                        <div class="detail-meta">
+                            <p><span>类型:</span>${movie.vod_class || movie.type_name || '-'}</p>
+                            <p><span>地区:</span>${movie.vod_area || '-'}</p>
+                            <p><span>语言:</span>${movie.vod_lang || '-'}</p>
+                            <p><span>年份:</span>${movie.vod_year || '-'}</p>
+                            <p><span>状态:</span>${movie.vod_remarks || '-'}</p>
+                            <p><span>主演:</span>${movie.vod_actor || '-'}</p>
+                            <p><span>导演:</span>${movie.vod_director || '-'}</p>
+                        </div>
+                        <div class="detail-blurb">
+                            <h3>简介</h3>
+                            <p>${movie.vod_blurb || '暂无简介'}</p>
                         </div>
                     </div>
                 </div>
-            </section>
-        </div>
-    </main>
+            `;
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelector('.logo')?.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
-        });
+            const prevBtn = document.getElementById('btnPrevEpisode');
+            const nextBtn = document.getElementById('btnNextEpisode');
+            if (prevBtn) addTapListener(prevBtn, playPrevEpisode);
+            if (nextBtn) addTapListener(nextBtn, playNextEpisode);
+
+            renderAllServers(movie);
+        }
+
+        // 判断是否为可直接播放的媒体地址（m3u8/mp4 等），过滤掉第三方 iframe 播放器页面
+        function isDirectMediaUrl(url) {
+            if (!url) return false;
+            try {
+                const u = new URL(url, window.location.href);
+                const pathname = u.pathname.toLowerCase();
+                return /\.(m3u8|mp4|mkv|flv|ts|avi|mov|webm|3gp)(\?.*)?$/.test(pathname);
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function renderAllServers(movie) {
+            const container = document.getElementById('allServers');
+
+            if (!movie.vod_play_url) {
+                container.innerHTML = '<div class="empty-state">暂无播放资源</div>';
+                return;
+            }
+
+            const servers = movie.vod_play_url.split('$$$');
+            const serverNames = movie.vod_play_from ? movie.vod_play_from.split('$$$') : [];
+
+            const validServers = [];
+            const seenNames = new Set();
+            servers.forEach((serverUrls, index) => {
+                const rawName = serverNames[index] || `线路${index + 1}`;
+                const serverName = seenNames.has(rawName) ? `${rawName} (${index + 1})` : rawName;
+                seenNames.add(rawName);
+                const isBlocked = blockedServers.some(blocked =>
+                    serverName.toLowerCase().includes(blocked.toLowerCase())
+                );
+                if (isBlocked || !serverUrls.trim()) return;
+
+                const episodes = [];
+                serverUrls.split('#').forEach((episode, i) => {
+                    if (!episode.trim()) return;
+                    const parsed = parseEpisode(episode, i);
+                    if (parsed && parsed.url) {
+                        episodes.push(parsed);
+                    }
+                });
+
+                if (episodes.length > 0) {
+                    validServers.push({
+                        name: serverName,
+                        urls: serverUrls,
+                        episodes: episodes,
+                        index: index
+                    });
+                }
+            });
+
+            // 只保留包含可直接播放地址的线路，过滤掉 iframe/第三方播放器页面
+            const directServers = validServers.filter(s => s.episodes.some(ep => isDirectMediaUrl(ep.url)));
+            // 前端只展示第一条可播放线路，后台仍保留其他线路用于自动切换
+            const displayServers = directServers.length > 0 ? [directServers[0]] : [];
+
+            movie._playServers = directServers.map(s => s.urls);
+            movie._playServerNames = directServers.map(s => s.name);
+
+            // 同步到缓存，方便下一集使用
+            if (moviesCache[currentVodId]) {
+                moviesCache[currentVodId]._playServers = movie._playServers;
+                moviesCache[currentVodId]._playServerNames = movie._playServerNames;
+            }
+
+            if (displayServers.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无可直接播放的线路</div>';
+                return;
+            }
+
+            container.innerHTML = displayServers.map((server) => `
+                <div class="server-section">
+                    <div class="server-header">
+                        <div class="server-name">${escapeHtml(server.name)}</div>
+                        <div class="server-actions"></div>
+                    </div>
+                    <ul class="play-list" style="display: flex;">
+                        ${server.episodes.map((ep, epIndex) => {
+                            const safeUrl = escapeHtml(ep.url);
+                            const safeTitle = escapeHtml(ep.title);
+                            const safeFullTitle = escapeHtml(ep.fullTitle);
+                            return `
+                            <li class="episode-item"
+                                data-url="${safeUrl}"
+                                data-server-index="0"
+                                data-episode-index="${epIndex}"
+                                data-title="${safeFullTitle}"
+                                title="${safeFullTitle}">
+                                <span>${safeTitle}</span>
+                            </li>
+                            `;
+                        }).join('')}
+                    </ul>
+                </div>
+            `).join('');
+
+            // 使用 addEventListener 绑定线路折叠与剧集点击（含 touchstart）
+            container.querySelectorAll('.server-header').forEach(header => {
+                addTapListener(header, () => toggleServerSection(header));
+            });
+            container.querySelectorAll('.episode-item').forEach(item => {
+                addTapListener(item, (e) => {
+                    if (e && e.stopPropagation) e.stopPropagation();
+                    const url = item.getAttribute('data-url');
+                    const serverIndex = parseInt(item.getAttribute('data-server-index'), 10);
+                    const epIndex = parseInt(item.getAttribute('data-episode-index'), 10);
+                    if (url) playVideo(url, serverIndex, epIndex);
+                });
+            });
+
+            // 自动播放第一集（只从可直接播放的线路里选）
+            if (directServers.length > 0) {
+                const firstServer = directServers[0];
+                if (firstServer.episodes.length > 0) {
+                    const firstEp = firstServer.episodes[0];
+                    requestAnimationFrame(() => {
+                        playVideo(firstEp.url, 0, 0);
+                    });
+                }
+            }
+        }
+
+        function parseEpisode(episode, index) {
+            let title = '';
+            let url = '';
+
+            const isUrl = (str) => {
+                return str.startsWith('http://') || str.startsWith('https://')
+                    || str.includes('.m3u8') || str.includes('.mp4')
+                    || str.includes('.flv') || str.includes('.mkv');
+            };
+
+            // 只按第一个 $ 分割，避免 URL 中的 $ 破坏地址
+            const separatorIndex = episode.indexOf('$');
+            if (separatorIndex !== -1) {
+                const first = episode.substring(0, separatorIndex).trim();
+                const second = episode.substring(separatorIndex + 1).trim();
+
+                if (isUrl(first)) {
+                    url = first;
+                    title = second || `第${index + 1}集`;
+                } else if (isUrl(second)) {
+                    url = second;
+                    title = first || `第${index + 1}集`;
+                } else {
+                    url = second;
+                    title = first || `第${index + 1}集`;
+                }
+            } else {
+                const single = episode.trim();
+                if (single.startsWith('http://') || single.startsWith('https://')
+                    || single.includes('.m3u8') || single.includes('.mp4')) {
+                    url = single;
+                    title = `第${index + 1}集`;
+                }
+            }
+
+            if (!url) return null;
+
+            // 完整标题保留在 data-title/tooltip 中，显示交给 CSS 截断
+            return { title, url, fullTitle: title };
+        }
+
+        function toggleServerSection(header) {
+            const section = header.parentElement;
+            const list = section.querySelector('.play-list');
+            if (list) {
+                list.style.display = list.style.display === 'none' ? 'flex' : 'none';
+            }
+        }
+
+        function extractTsNumber(filename) {
+            // 提取 .ts 前面数字串的最后 6 位作为片段序号；兼容 ?token=xxx 后缀
+            const match = filename.match(/(\d+)\.ts(?:\?|$)/i);
+            if (!match) return null;
+            const suffix = match[1].slice(-6);
+            return parseInt(suffix, 10);
+        }
+
+        function resolveUrl(base, relative) {
+            if (!relative) return '';
+            if (/^https?:\/\//i.test(relative)) return relative;
+            return new URL(relative, base).href;
+        }
+
+        // 若 m3u8 经过 proxy.php 代理，需取原始地址用于计算 baseUrl
+        function getOriginalM3u8Url(m3u8Url) {
+            try {
+                if (m3u8Url.includes('proxy.php?url=')) {
+                    const urlObj = new URL(m3u8Url, window.location.href);
+                    const original = urlObj.searchParams.get('url');
+                    if (original) return decodeURIComponent(original);
+                }
+            } catch (e) {}
+            return m3u8Url;
+        }
+
+        async function filterAdTsFromM3u8(m3u8Url, relativeThreshold = 10000) {
+            try {
+                console.log('[广告过滤] 开始过滤:', m3u8Url);
+                const res = await fetch(getProxyUrl(m3u8Url));
+                if (!res.ok) {
+                    console.warn('[广告过滤] m3u8 请求失败:', res.status);
+                    return m3u8Url;
+                }
+                let text = await res.text();
+                console.log('[广告过滤] m3u8 长度:', text.length);
+
+                const originalUrl = getOriginalM3u8Url(m3u8Url);
+                let baseUrl = originalUrl.split('?')[0];
+                if (!baseUrl.endsWith('/')) {
+                    baseUrl = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+                }
+                console.log('[广告过滤] baseUrl:', baseUrl);
+
+                // 如果当前 m3u8 本身走代理，则后续相对路径 ts 也应继续走代理
+                const isProxyM3u8 = m3u8Url.includes('proxy.php?url=');
+                function resolveTsUrl(line) {
+                    if (/^https?:\/\//i.test(line)) return line;
+                    const absoluteUrl = resolveUrl(baseUrl, line);
+                    return isProxyM3u8 ? getProxyUrl(absoluteUrl) : absoluteUrl;
+                }
+
+                const lines = text.split('\n');
+
+                // 多码率主 m3u8：递归过滤子清单
+                if (text.includes('#EXT-X-STREAM-INF')) {
+                    console.log('[广告过滤] 多码率主 m3u8，开始过滤子清单');
+                    const filtered = [];
+                    let changed = false;
+                    let expectStreamUrl = false;
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+
+                        if (line.startsWith('#EXT-X-STREAM-INF')) {
+                            expectStreamUrl = true;
+                            filtered.push(line);
+                            continue;
+                        }
+
+                        if (expectStreamUrl && line.trim() && !line.startsWith('#')) {
+                            expectStreamUrl = false;
+                            const childUrl = resolveTsUrl(line);
+                            const filteredChildUrl = await filterAdTsFromM3u8(childUrl, relativeThreshold);
+                            if (filteredChildUrl !== childUrl) {
+                                changed = true;
+                                console.log('[广告过滤] 子清单已过滤:', childUrl, '->', filteredChildUrl);
+                            }
+                            filtered.push(filteredChildUrl);
+                            continue;
+                        }
+
+                        filtered.push(line);
+                    }
+
+                    if (!changed) return m3u8Url;
+
+                    const blob = new Blob([filtered.join('\n')], { type: 'application/x-mpegURL' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    console.log('[广告过滤] 主清单过滤完成，返回 blob URL:', blobUrl);
+                    return blobUrl;
+                }
+
+                // 普通媒体 m3u8：按绝对序号 >100000 或相对基准过滤 ts
+                const filtered = [];
+                let changed = false;
+                let adCount = 0;
+                let firstTsNum = null;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+
+                    if (line.startsWith('#EXTINF')) {
+                        filtered.push(line);
+                        continue;
+                    }
+
+                    if (/\.ts/i.test(line)) {
+                        const num = extractTsNumber(line);
+                        if (firstTsNum === null) firstTsNum = num;
+
+                        // 广告 ts：序号本身超过 100000，或比首片序号突增超过阈值
+                        if (num !== null && (num > 100000 || (firstTsNum !== null && num - firstTsNum > relativeThreshold))) {
+                            changed = true;
+                            adCount++;
+                            console.log('[广告过滤] 过滤广告 ts:', line, '首片:', firstTsNum, '当前:', num);
+                            // 同时删除前一行对应的 #EXTINF
+                            if (filtered.length > 0 && filtered[filtered.length - 1].startsWith('#EXTINF')) {
+                                filtered.pop();
+                            }
+                            continue;
+                        }
+                        filtered.push(resolveTsUrl(line));
+                        continue;
+                    }
+
+                    filtered.push(line);
+                }
+
+                console.log('[广告过滤] 广告 ts 数量:', adCount, '是否变化:', changed);
+                if (!changed) return m3u8Url;
+
+                const blob = new Blob([filtered.join('\n')], { type: 'application/x-mpegURL' });
+                const blobUrl = URL.createObjectURL(blob);
+                console.log('[广告过滤] 返回 blob URL:', blobUrl);
+                return blobUrl;
+            } catch (e) {
+                console.error('[广告过滤] 失败:', e);
+                return m3u8Url;
+            }
+        }
+
+        // 暴露到全局，方便控制台测试
+        window.extractTsNumber = extractTsNumber;
+        window.filterAdTsFromM3u8 = filterAdTsFromM3u8;
+        window.filterM3u8Ads = filterAdTsFromM3u8;
+
+        // 控制台直接传入 m3u8 文本进行测试
+        window.testFilterM3u8Ads = function(m3u8Text, relativeThreshold = 10000) {
+            const lines = m3u8Text.split('\n');
+            const filtered = [];
+            let adCount = 0;
+            let firstTsNum = null;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                if (line.startsWith('#EXTINF')) {
+                    filtered.push(line);
+                    continue;
+                }
+
+                if (/\.ts/i.test(line)) {
+                    const num = extractTsNumber(line);
+                    console.log('[测试过滤] ts 行:', line, '提取数字:', num);
+                    if (firstTsNum === null) firstTsNum = num;
+
+                    if (num !== null && firstTsNum !== null && num - firstTsNum > relativeThreshold) {
+                        adCount++;
+                        console.log('[测试过滤] 过滤广告 ts:', line, '基准:', firstTsNum, '差值:', num - firstTsNum);
+                        if (filtered.length > 0 && filtered[filtered.length - 1].startsWith('#EXTINF')) {
+                            filtered.pop();
+                        }
+                        continue;
+                    }
+                    filtered.push(line);
+                    continue;
+                }
+
+                filtered.push(line);
+            }
+
+            console.log('[测试过滤] 广告数量:', adCount);
+            console.log('[测试过滤] 结果:\n' + filtered.join('\n'));
+            return filtered.join('\n');
+        };
+
+        // 同时绑定 click 与 touchstart，防止移动端 300ms 延迟及重复触发
+        function addTapListener(el, handler) {
+            if (!el || typeof handler !== 'function') return;
+            let lastTouchTime = 0;
+            const onTouch = (e) => {
+                lastTouchTime = Date.now();
+                e.preventDefault();
+                handler(e);
+            };
+            const onClick = (e) => {
+                if (Date.now() - lastTouchTime < 500) {
+                    e.preventDefault();
+                    return;
+                }
+                handler(e);
+            };
+            el.addEventListener('touchstart', onTouch, { passive: false });
+            el.addEventListener('click', onClick);
+        }
+
+        async function playVideo(url, serverIndex, episodeIndex, isAutoRetry = false) {
+            const canUse = await checkUserAccess();
+            if (!canUse) {
+                showLoginRequired();
+                return;
+            }
+
+            const videoPlayer = document.getElementById('videoPlayer');
+
+            // 记录当前播放位置
+            currentServerIndex = serverIndex;
+            currentEpisodeIndex = episodeIndex;
+            currentEpisodeUrl = url || '';
+            if (!isAutoRetry) {
+                currentPlayAttemptServers = new Set();
+                hasAutoRetriedCurrentEpisode = false;
+            }
+
+            // 高亮当前选中的剧集
+            document.querySelectorAll('.play-list li').forEach(item => item.classList.remove('active'));
+            const sections = document.querySelectorAll('.server-section');
+            let episodeTitle = '';
+            if (sections[serverIndex]) {
+                const items = sections[serverIndex].querySelectorAll('.play-list li');
+                if (items[episodeIndex]) {
+                    items[episodeIndex].classList.add('active');
+                    items[episodeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    episodeTitle = items[episodeIndex].getAttribute('data-title') || '';
+                }
+            }
+
+            // 更新顶部播放信息
+            const episodeNameEl = document.getElementById('playingEpisodeName');
+            if (episodeNameEl) {
+                episodeNameEl.textContent = episodeTitle ? ` · ${episodeTitle}` : '';
+            }
+
+            // 记录到播放历史
+            addToHistory();
+
+            // 确保声音解锁处理器已注册（兼容快速进入播放页的情况）
+            addGlobalUnmuteHandler();
+
+            if (!url) {
+                videoPlayer.innerHTML = '<div class="placeholder">暂无播放地址</div>';
+                return;
+            }
+
+            if (currentHls) {
+                currentHls.destroy();
+                currentHls = null;
+            }
+
+            // 先停止旧视频，避免替换 DOM 时触发 play() 中断报错
+            const oldVideo = videoPlayer.querySelector('video');
+            if (oldVideo) {
+                oldVideo.pause();
+                oldVideo.src = '';
+                oldVideo.load();
+            }
+
+            videoPlayer.innerHTML = '<div class="placeholder">加载中...</div>';
+
+            const isM3u8 = url.includes('.m3u8');
+            const isDirectVideo = url.includes('.mp4') || url.includes('.flv') || url.includes('.mkv') || isM3u8;
+
+            if (isDirectVideo) {
+                let playUrl = isLocalPreview() ? url : getProxyUrl(url);
+
+                if (isM3u8) {
+                    // 先过滤广告 ts，避免播放中因广告分片失效或跳转而中断
+                    videoPlayer.innerHTML = '<div class="placeholder">正在解析播放地址...</div>';
+                    playUrl = await filterAdTsFromM3u8(playUrl);
+
+                    videoPlayer.innerHTML = `
+                        <video id="mainVideo" controls playsinline style="width:100%;height:100%;border-radius:8px;background:#000;">
+                            <source src="${playUrl}" type="application/x-mpegURL">
+                        </video>
+                    `;
+
+                    const video = document.getElementById('mainVideo');
+                    attachVideoRecoveryEvents(video, videoPlayer);
+
+                    // 尽早注册错误监听，避免加载过程中出错未被捕获
+                    video.addEventListener('error', function() {
+                        // 忽略已被切换或清理的旧播放器错误
+                        if (video !== videoPlayer.querySelector('video')) return;
+                        const errInfo = video.error ? { code: video.error.code, message: video.error.message } : null;
+
+                        // 播放中的网络错误先尝试原地恢复（reload + 续播），避免直接重建播放器（hls.js 由自身错误处理接管）
+                        if (video.error && video.error.code === 2 && video.currentTime > 0 && !video._inPlaceRetryDone && !currentHls) {
+                            video._inPlaceRetryDone = true;
+                            const lastTime = video.currentTime;
+                            console.warn('播放中网络错误，尝试原地恢复', errInfo);
+                            const onLoaded = () => {
+                                video.currentTime = lastTime;
+                                tryPlayVideo(video);
+                                video.removeEventListener('loadedmetadata', onLoaded);
+                            };
+                            video.addEventListener('loadedmetadata', onLoaded);
+                            video.load();
+                            return;
+                        }
+
+                        console.warn('Video error, triggering fallback/retry', errInfo);
+                        handlePlayFailure(videoPlayer);
+                    });
+                    video.addEventListener('ended', onVideoEnded);
+
+                    const canPlayNativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== '';
+
+                    // 浏览器不支持原生 HLS 且 hls.js 尚未就绪时，等待回退 CDN 加载完成（国内网络常见）
+                    if (!canPlayNativeHls && !window.Hls && typeof window.waitForHls === 'function') {
+                        await window.waitForHls(8000);
+                    }
+
+                    if (canPlayNativeHls) {
+                        // Safari/部分移动端浏览器原生支持 HLS，通常音质更稳定
+                        console.log('使用浏览器原生 HLS 播放');
+                        tryPlayVideo(video);
+                    } else if (window.Hls && window.Hls.isSupported()) {
+                        try {
+                            const hls = new Hls({
+                                enableWorker: true,
+                                lowInitialPlaylist: false,
+                                defaultAudioCodec: 'mp4a.40.2',
+                                enableAudioTrackSwitching: false,
+                                stretchShortVideoTrack: false,
+                                forceKeyFrameOnDiscontinuity: true,
+                                maxBufferLength: 90,
+                                maxMaxBufferLength: 180,
+                                backBufferLength: 90,
+                                maxBufferSize: 90 * 1000 * 1000,
+                                maxBufferHole: 1.0,
+                                highBufferWatchdogPeriod: 20,
+                                nudgeOffset: 0.05,
+                                nudgeMaxRetry: 5,
+                                maxFragLookUpTolerance: 0.25,
+                                liveSyncDurationCount: 3,
+                                liveMaxLatencyDurationCount: 15,
+                                manifestLoadingTimeout: 30000,
+                                manifestLoadingMaxRetry: 6,
+                                levelLoadingTimeout: 20000,
+                                levelLoadingMaxRetry: 6,
+                                fragLoadingTimeout: 20000,
+                                fragLoadingMaxRetry: 6,
+                                fpsDroppedMonitoring: false,
+                                abrEwmaDefaultEstimate: 5000000,
+                                abrEwmaFastLive: 2.0,
+                                abrEwmaSlowLive: 8.0,
+                                abrEwmaFastVoD: 2.0,
+                                abrEwmaSlowVoD: 8.0,
+                                abrBandWidthFactor: 0.7,
+                                abrBandWidthUpFactor: 0.8,
+                                abrMaxWithRealBitrate: false,
+                                capLevelToPlayerSize: false,
+                                maxAutoLevel: -1,
+                                startLevel: -1
+                            });
+
+                            currentHls = hls;
+                            hls.loadSource(playUrl);
+                            hls.attachMedia(video);
+
+                            let recoverTime = 0;
+                            let lastKnownTime = 0;
+                            let seekAttempts = 0;
+                            const MAX_SEEK_ATTEMPTS = 10;
+                            let mediaErrorRecoverCount = 0;
+                            const MAX_MEDIA_ERROR_RECOVER = 2;
+                            let networkErrorRecoverCount = 0;
+                            const MAX_NETWORK_ERROR_RECOVER = 2;
+
+                            function tryRestorePosition() {
+                                if (recoverTime > 0 && video) {
+                                    if (Math.abs(video.currentTime - recoverTime) > 1) {
+                                        video.currentTime = recoverTime;
+                                        seekAttempts++;
+                                        console.log('[HLS 恢复] 尝试恢复到:', recoverTime, '当前:', video.currentTime, '第', seekAttempts, '次');
+                                        if (seekAttempts >= MAX_SEEK_ATTEMPTS) {
+                                            console.log('[HLS 恢复] 达到最大尝试次数，放弃恢复');
+                                            recoverTime = 0;
+                                            seekAttempts = 0;
+                                        }
+                                    } else {
+                                        console.log('[HLS 恢复] 恢复成功:', video.currentTime);
+                                        recoverTime = 0;
+                                        seekAttempts = 0;
+                                    }
+                                }
+                            }
+
+                            video.addEventListener('timeupdate', () => {
+                                if (video && video.currentTime > 0) {
+                                    lastKnownTime = video.currentTime;
+                                    lastTime = video.currentTime;
+                                }
+                            });
+
+                            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                                // manifest 解析完成，开始播放
+                                console.log('Manifest parsed, levels:', data.levels ? data.levels.length : 0);
+                                tryPlayVideo(video);
+                                tryRestorePosition();
+                            });
+
+                            hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function(event, data) {
+                                console.log('音频轨道切换:', data);
+                                // 若发生非预期音频轨道切换，尝试切回默认轨道
+                                if (hls.audioTracks && hls.audioTracks.length > 1 && hls.audioTrack !== 0) {
+                                    hls.audioTrack = 0;
+                                }
+                            });
+
+                            hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+                                tryRestorePosition();
+                            });
+
+                            video.addEventListener('loadedmetadata', tryRestorePosition);
+                            video.addEventListener('canplay', tryRestorePosition);
+                            video.addEventListener('playing', tryRestorePosition);
+
+                            hls.on(Hls.Events.ERROR, function(event, data) {
+                                console.error('HLS Error:', data);
+                                if (data.fatal) {
+                                    switch(data.type) {
+                                        case Hls.ErrorTypes.MEDIA_ERROR:
+                                            recoverTime = lastKnownTime || (video ? (video.currentTime || 0) : 0);
+                                            seekAttempts = 0;
+                                            mediaErrorRecoverCount++;
+                                            console.log('[HLS 恢复] 媒体错误，记录播放位置:', recoverTime, '第', mediaErrorRecoverCount, '次');
+                                            if (mediaErrorRecoverCount > MAX_MEDIA_ERROR_RECOVER) {
+                                                console.error('[HLS 恢复] 媒体错误恢复次数超限，切换线路');
+                                                hls.destroy();
+                                                currentHls = null;
+                                                handlePlayFailure(videoPlayer);
+                                            } else {
+                                                hls.recoverMediaError();
+                                                setTimeout(() => {
+                                                    if (currentHls === hls) hls.startLoad();
+                                                }, 200);
+                                            }
+                                            break;
+                                        case Hls.ErrorTypes.NETWORK_ERROR:
+                                            // 网络错误多为瞬时抖动，先在当前线路原地重试加载，避免过早切换线路
+                                            networkErrorRecoverCount++;
+                                            if (networkErrorRecoverCount <= MAX_NETWORK_ERROR_RECOVER) {
+                                                console.warn('[HLS 恢复] 网络错误，原地重试加载，第', networkErrorRecoverCount, '次');
+                                                setTimeout(() => {
+                                                    if (currentHls === hls) { try { hls.startLoad(); } catch (e) {} }
+                                                }, 800);
+                                            } else {
+                                                console.error('HLS 网络错误恢复超限，尝试切换线路');
+                                                handlePlayFailure(videoPlayer);
+                                            }
+                                            break;
+                                        default:
+                                            hls.destroy();
+                                            handlePlayFailure(videoPlayer);
+                                            break;
+                                    }
+                                }
+                            });
+                        } catch (error) {
+                            console.error('HLS Init Error:', error);
+                        }
+                    } else {
+                        console.error('浏览器不支持 HLS 播放');
+                        videoPlayer.innerHTML = '<div class="placeholder">当前浏览器不支持 HLS 播放</div>';
+                    }
+
+                } else {
+                    // mp4 等直接视频文件，使用原生 video 播放器
+                    videoPlayer.innerHTML = `
+                        <video id="mainVideo" controls playsinline style="width:100%;height:100%;border-radius:8px;background:#000;">
+                            <source src="${playUrl}" type="video/mp4">
+                        </video>
+                    `;
+
+                    const video = document.getElementById('mainVideo');
+                    attachVideoRecoveryEvents(video, videoPlayer);
+
+                    // 尽早注册错误监听，避免加载过程中出错未被捕获
+                    video.addEventListener('error', function() {
+                        // 忽略已被切换或清理的旧播放器错误
+                        if (video !== videoPlayer.querySelector('video')) return;
+                        const errInfo = video.error ? { code: video.error.code, message: video.error.message } : null;
+
+                        // 播放中的网络错误先尝试原地恢复（reload + 续播），避免直接重建播放器（hls.js 由自身错误处理接管）
+                        if (video.error && video.error.code === 2 && video.currentTime > 0 && !video._inPlaceRetryDone && !currentHls) {
+                            video._inPlaceRetryDone = true;
+                            const lastTime = video.currentTime;
+                            console.warn('播放中网络错误，尝试原地恢复', errInfo);
+                            const onLoaded = () => {
+                                video.currentTime = lastTime;
+                                tryPlayVideo(video);
+                                video.removeEventListener('loadedmetadata', onLoaded);
+                            };
+                            video.addEventListener('loadedmetadata', onLoaded);
+                            video.load();
+                            return;
+                        }
+
+                        console.warn('Video error, triggering fallback/retry', errInfo);
+                        handlePlayFailure(videoPlayer);
+                    });
+                    video.addEventListener('ended', onVideoEnded);
+                    tryPlayVideo(video);
+                }
+            } else {
+                // 非直接播放地址（iframe 页面等），不再嵌入，直接尝试切换线路
+                console.log('[非直接播放地址] 尝试切换线路:', url);
+                handlePlayFailure(videoPlayer);
+            }
+        }
+
+        // 为 video 绑定卡顿/缓冲/后台切回等自动恢复事件
+        function attachVideoRecoveryEvents(video, videoPlayer) {
+            if (!video || video._recoveryAttached) return;
+            video._recoveryAttached = true;
+
+            let lastTime = 0;
+            let stuckTimer = null;
+            let wasPausedByUser = false;
+
+            function clearStuckTimer() {
+                if (stuckTimer) {
+                    clearTimeout(stuckTimer);
+                    stuckTimer = null;
+                }
+            }
+
+            video.addEventListener('play', () => {
+                wasPausedByUser = false;
+                clearStuckTimer();
+            });
+
+            video.addEventListener('playing', () => {
+                lastTime = video.currentTime;
+                clearStuckTimer();
+            });
+
+            video.addEventListener('timeupdate', () => {
+                if (video.currentTime > lastTime) {
+                    lastTime = video.currentTime;
+                    clearStuckTimer();
+                }
+            });
+
+            video.addEventListener('pause', () => {
+                // 仅当页面可见、未结束、且不是恢复过程中时，才判定为用户主动暂停
+                if (!document.hidden && !video.ended && video.currentTime > 0 && video.currentTime < (video.duration || Infinity)) {
+                    wasPausedByUser = true;
+                }
+            });
+
+            video.addEventListener('waiting', () => {
+                console.log('[播放缓冲] waiting 事件，当前时间:', video.currentTime);
+                lastTime = video.currentTime;
+                if (!video.paused && !video.ended) {
+                    setTimeout(() => {
+                        if (video.buffered.length > 0) {
+                            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                            const gap = bufferedEnd - video.currentTime;
+                            if (gap >= 1) {
+                                console.log("[播放缓冲] Buffer available, gap:", gap.toFixed(2));
+                                video.play().catch(() => {});
+                            }
+                        }
+                    }, 2000);
+                }
+            });
+
+            video.addEventListener('stalled', () => {
+                console.warn('[播放卡顿] stalled 事件，当前时间:', video.currentTime);
+                if (video.paused || video.ended) return;
+                clearStuckTimer();
+                
+                // 立即检查缓冲区
+                const checkBuffer = () => {
+                    if (video !== videoPlayer.querySelector('video')) return;
+                    if (video.paused || video.ended) return;
+                    
+                    // 检查缓冲区状态
+                    if (video.buffered.length > 0) {
+                        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+                        const currentTime = video.currentTime;
+                        const gap = bufferedEnd - currentTime;
+                        
+                        console.log('[播放卡顿] Buffer gap:', gap.toFixed(2), 'current:', currentTime.toFixed(2), 'bufferedEnd:', bufferedEnd.toFixed(2));
+                        
+                        // 缓冲足够，恢复播放
+                        if (gap < 2) {
+                            console.log('[播放卡顿] Buffer sufficient, resume playback');
+                            video.play().catch(() => {});
+                        } else if (gap > 10) {
+                            // 缓冲区很大，跳转到接近末尾
+                            console.log('[播放卡顿] Large buffer gap, seeking to:', bufferedEnd - 0.5);
+                            video.currentTime = Math.max(currentTime + 0.1, bufferedEnd - 0.5);
+                            setTimeout(() => video.play().catch(() => {}), 100);
+                        } else {
+                            // 等待更多缓冲
+                            console.log('[播放卡顿] Waiting for more buffer...');
+                            stuckTimer = setTimeout(checkBuffer, 1000);
+                        }
+                    } else {
+                        console.log('[播放卡顿] No buffer yet, retrying...');
+                        stuckTimer = setTimeout(checkBuffer, 1000);
+                    }
+                };
+                
+                // 立即执行检查
+                checkBuffer();
+            });
+
+            // 页面切回前台时，若因系统冻结导致暂停，自动恢复播放
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && video === videoPlayer.querySelector('video')) {
+                    if (!video.ended && !wasPausedByUser && video.paused) {
+                        console.log('[页面切回] 尝试恢复播放');
+                        video.play().catch(() => {});
+                    }
+                }
+            });
+        }
+
+        function tryPlayVideo(video) {
+            if (!video) return;
+
+            const playPromise = video.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+                playPromise.then(() => {
+                    console.log('视频自动播放成功');
+                    addUnmuteOnInteraction(video);
+                }).catch(error => {
+                    if (error.name === 'AbortError' && error.message && error.message.includes('interrupted')) {
+                        // 切换视频时旧 play()  Promise 被中断，属于正常清理过程，不视为错误
+                        return;
+                    }
+                    console.log('自动播放被阻止，等待用户手动播放:', error.name, error.message);
+                    // 不再尝试静音播放
+                });
+            }
+        }
+
+        function addUnmuteOnInteraction(video) {
+            if (!video || video._unmuteHandlerAdded) return;
+            video._unmuteHandlerAdded = true;
+
+            const unmute = () => {
+                if (video && video.muted) {
+                    video.muted = false;
+                    video.volume = 1;
+                    console.log('用户交互后恢复声音');
+                }
+            };
+
+            video.addEventListener('click', unmute, { once: true });
+            video.addEventListener('touchstart', unmute, { once: true });
+        }
+
+        // 全局交互解锁声音：安卓等浏览器首次交互可能不在 video 上，捕获整个页面
+        function addGlobalUnmuteHandler() {
+            if (window._globalUnmuteHandlerAdded) return;
+            window._globalUnmuteHandlerAdded = true;
+
+            const unmute = () => {
+                const video = document.getElementById('mainVideo');
+                if (video && video.muted) {
+                    video.muted = false;
+                    video.volume = 1;
+                    console.log('页面交互后恢复声音');
+                }
+            };
+
+            document.addEventListener('click', unmute);
+            document.addEventListener('touchstart', unmute, { passive: true });
+        }
+
+        function onVideoEnded() {
+            console.log('当前剧集播放结束，尝试播放下一集');
+            playNextEpisode();
+        }
+
+        function handlePlayFailure(videoPlayer) {
+            const movie = moviesCache[currentVodId];
+            if (!movie || !movie._playServers) {
+                if (videoPlayer) videoPlayer.innerHTML = '<div class="placeholder">播放失败，请尝试其他线路或接口</div>';
+                return;
+            }
+
+            // 首次失败时先自动重试当前线路一次，很多错误是瞬时的
+            if (!hasAutoRetriedCurrentEpisode) {
+                hasAutoRetriedCurrentEpisode = true;
+                const currentServerUrls = movie._playServers[currentServerIndex];
+                if (currentServerUrls) {
+                    const episodes = [];
+                    currentServerUrls.split('#').forEach((ep, idx) => {
+                        if (!ep.trim()) return;
+                        const parsed = parseEpisode(ep, idx);
+                        if (parsed && parsed.url) episodes.push(parsed);
+                    });
+                    if (episodes.length > 0 && currentEpisodeIndex < episodes.length) {
+                        console.log('[播放失败] 自动重试当前线路');
+                        if (videoPlayer) videoPlayer.innerHTML = '<div class="placeholder">加载失败，正在重试...</div>';
+                        setTimeout(() => playVideo(episodes[currentEpisodeIndex].url, currentServerIndex, currentEpisodeIndex, true), 600);
+                        return;
+                    }
+                }
+            }
+
+            currentPlayAttemptServers.add(currentServerIndex);
+
+            // 尝试当前集数的下一个可用线路
+            for (let i = 0; i < movie._playServers.length; i++) {
+                if (currentPlayAttemptServers.has(i)) continue;
+                const serverUrls = movie._playServers[i];
+                if (!serverUrls) continue;
+                const episodes = [];
+                serverUrls.split('#').forEach((ep, idx) => {
+                    if (!ep.trim()) return;
+                    const parsed = parseEpisode(ep, idx);
+                    if (parsed && parsed.url) episodes.push(parsed);
+                });
+                if (episodes.length > 0 && currentEpisodeIndex < episodes.length) {
+                    console.log('[播放失败] 切换到线路', i, '当前集数');
+                    if (videoPlayer) videoPlayer.innerHTML = '<div class="placeholder">当前线路失败，尝试其他线路...</div>';
+                    setTimeout(() => playVideo(episodes[currentEpisodeIndex].url, i, currentEpisodeIndex), 500);
+                    return;
+                }
+            }
+
+            // 所有线路都试过了
+            console.error('[播放失败] 所有线路均无法播放，显示重试按钮');
+            currentPlayAttemptServers.clear();
+            if (videoPlayer) {
+                if (currentEpisodeUrl) {
+                    videoPlayer.innerHTML = `
+                        <div class="player-error">
+                            <p>当前影片所有线路均无法播放</p>
+                            <button class="btn btn-primary player-retry-btn" type="button" aria-label="点击重试">点击重试</button>
+                        </div>
+                    `;
+                    const retryBtn = videoPlayer.querySelector('.player-retry-btn');
+                    addTapListener(retryBtn, () => {
+                        console.log('[播放重试] 重新播放当前集:', currentEpisodeUrl);
+                        playVideo(currentEpisodeUrl, currentServerIndex, currentEpisodeIndex);
+                    });
+                } else {
+                    videoPlayer.innerHTML = '<div class="placeholder">当前影片所有线路均无法播放，请切换接口源后重试</div>';
+                }
+            }
+        }
+
+        function playNextEpisode() {
+            const movie = moviesCache[currentVodId];
+            if (!movie || !movie._playServers) return;
+
+            const currentServerUrls = movie._playServers[currentServerIndex];
+            if (!currentServerUrls) return;
+
+            const currentEpisodes = [];
+            currentServerUrls.split('#').forEach((ep, i) => {
+                if (!ep.trim()) return;
+                const parsed = parseEpisode(ep, i);
+                if (parsed && parsed.url) currentEpisodes.push(parsed);
+            });
+
+            const nextEpisodeIndex = currentEpisodeIndex + 1;
+            if (nextEpisodeIndex < currentEpisodes.length) {
+                console.log('播放下一集:', nextEpisodeIndex);
+                playVideo(currentEpisodes[nextEpisodeIndex].url, currentServerIndex, nextEpisodeIndex);
+            } else {
+                console.log('当前线路已播放完毕');
+                clearPlaybackState();
+            }
+        }
+
+        function playPrevEpisode() {
+            const movie = moviesCache[currentVodId];
+            if (!movie || !movie._playServers) return;
+
+            const currentServerUrls = movie._playServers[currentServerIndex];
+            if (!currentServerUrls) return;
+
+            const currentEpisodes = [];
+            currentServerUrls.split('#').forEach((ep, i) => {
+                if (!ep.trim()) return;
+                const parsed = parseEpisode(ep, i);
+                if (parsed && parsed.url) currentEpisodes.push(parsed);
+            });
+
+            const prevEpisodeIndex = currentEpisodeIndex - 1;
+            if (prevEpisodeIndex >= 0) {
+                console.log('播放上一集:', prevEpisodeIndex);
+                playVideo(currentEpisodes[prevEpisodeIndex].url, currentServerIndex, prevEpisodeIndex);
+            }
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function goHome() {
+            stopPlayback(true);
+            currentVodId = 0;
+            currentServerIndex = 0;
+            currentEpisodeIndex = 0;
+            searchKeyword = '';
+            document.getElementById('searchInput').value = '';
+            document.getElementById('detailView')?.classList.remove('active');
+            document.getElementById('listView').style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            loadMovies();
+        }
+
+        function getPlayHistory() {
+            try {
+                return JSON.parse(localStorage.getItem('playHistory')) || [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function savePlayHistory(history) {
+            localStorage.setItem('playHistory', JSON.stringify(history.slice(0, 50)));
+        }
+
+        function addToHistory() {
+            const movie = moviesCache[currentVodId];
+            if (!movie) return;
+
+            const episodeNameEl = document.getElementById('playingEpisodeName');
+            const episodeTitle = episodeNameEl ? episodeNameEl.textContent.replace(' · ', '') : '';
+            const record = {
+                vodId: currentVodId,
+                vodName: movie.vod_name || '未知影片',
+                vodPic: movie.vod_pic || '',
+                episodeTitle: episodeTitle,
+                serverIndex: currentServerIndex,
+                episodeIndex: currentEpisodeIndex,
+                timestamp: Date.now()
+            };
+
+            let history = getPlayHistory();
+            const existIndex = history.findIndex(item => item.vodId === currentVodId);
+            if (existIndex !== -1) {
+                history.splice(existIndex, 1);
+            }
+            history.unshift(record);
+            savePlayHistory(history);
+        }
+
+        function renderHistory() {
+            const historyList = document.getElementById('historyList');
+            const historyActions = document.getElementById('historyActions');
+            const history = getPlayHistory();
+
+            if (history.length === 0) {
+                historyList.innerHTML = '<li class="history-empty">暂无播放记录</li>';
+                historyActions.style.display = 'none';
+                return;
+            }
+
+            historyActions.style.display = 'flex';
+            historyList.innerHTML = history.map((item, index) => `
+                <li class="history-item" onclick="playFromHistory(${index})">
+                    <img src="${item.vodPic ? getProxyUrl(item.vodPic) : ''}" alt="" loading="lazy" onerror="this.style.display='none'">
+                    <div class="history-item-info">
+                        <div class="history-item-title">${escapeHtml(item.vodName)}</div>
+                        ${item.episodeTitle ? `<div class="history-item-episode">${escapeHtml(item.episodeTitle)}</div>` : ''}
+                        <div class="history-item-time">${formatTime(item.timestamp)}</div>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function playFromHistory(index) {
+            const history = getPlayHistory();
+            const item = history[index];
+            if (!item) return;
+
+            closeModal('historyModal');
+            showDetail(item.vodId).then(() => {
+                const movie = moviesCache[item.vodId];
+                if (!movie || !movie._playServers) return;
+                const serverUrls = movie._playServers[item.serverIndex];
+                if (!serverUrls) return;
+                const episodes = [];
+                serverUrls.split('#').forEach((ep, i) => {
+                    if (!ep.trim()) return;
+                    const parsed = parseEpisode(ep, i);
+                    if (parsed && parsed.url) episodes.push(parsed);
+                });
+                if (episodes[item.episodeIndex]) {
+                    playVideo(episodes[item.episodeIndex].url, item.serverIndex, item.episodeIndex);
+                }
+            });
+        }
+
+        function clearHistory() {
+            if (!confirm('确定要清空所有播放记录吗？')) return;
+            localStorage.removeItem('playHistory');
+            renderHistory();
+        }
+
+        function openHistory() {
+            renderHistory();
+            openModal('historyModal');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            if (diff < 60000) return '刚刚';
+            if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+            return date.toLocaleDateString('zh-CN');
+        }
+
+
+        // 用户登录相关逻辑（使用 IndexedDB 存储，避免 iOS localStorage 丢失）
+        const USER_KEY = 'qianxun_user';
+        const TOKEN_KEY = 'qianxun_token';
+        const TRIAL_START_KEY = 'qianxun_trial_start';
+let trialDuration = 60 * 60 * 1000; // 默认1小时，从后台配置加载
+        const TRIAL_DURATION = trialDuration; // 从后台配置获取
+        let trialTimer = null;
+        // 服务器校验节流：登录后一段时间内信任本地状态，避免每次播放都请求后端（降低播放启动延迟与误判掉线）
+        let lastServerVerifyTime = 0;
+        const SERVER_VERIFY_INTERVAL = 120000; // 2 分钟内不重复向后端校验
+
+        const userDB = {
+            db: null,
+            init() {
+                return new Promise((resolve, reject) => {
+                    if (this.db) return resolve(this.db);
+                    const request = indexedDB.open('qianxunUserDB', 1);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        this.db = request.result;
+                        resolve(this.db);
+                    };
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains('user')) {
+                            db.createObjectStore('user');
+                        }
+                    };
+                });
+            },
+            async get(key) {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction('user', 'readonly');
+                    const store = tx.objectStore('user');
+                    const request = store.get(key);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                });
+            },
+            async set(key, value) {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction('user', 'readwrite');
+                    const store = tx.objectStore('user');
+                    const request = store.put(value, key);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve();
+                });
+            },
+            async remove(key) {
+                const db = await this.init();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction('user', 'readwrite');
+                    const store = tx.objectStore('user');
+                    const request = store.delete(key);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve();
+                });
+            }
+        };
+
+        // 内存缓存，避免频繁读 IndexedDB
+        let userCache = {
+            username: '',
+            token: '',
+            trialStart: 0
+        };
+
+        async function loadUserCache() {
+            try {
+                let username = await userDB.get(USER_KEY);
+                let token = await userDB.get(TOKEN_KEY);
+                let trialStart = await userDB.get(TRIAL_START_KEY);
+
+                // 兼容旧版本试用开始时间
+                if (!trialStart && localStorage.getItem(TRIAL_START_KEY)) {
+                    trialStart = localStorage.getItem(TRIAL_START_KEY);
+                    await userDB.set(TRIAL_START_KEY, trialStart);
+                    localStorage.removeItem(TRIAL_START_KEY);
+                }
+
+                userCache = {
+                    username: username || '',
+                    token: token || '',
+                    trialStart: parseInt(trialStart, 10) || 0
+                };
+            } catch (e) {
+                console.error('加载用户缓存失败:', e);
+            }
+        }
+
+        function isLoggedIn() {
+            return !!(userCache.username && userCache.token);
+        }
+
+        function getUserInfo() {
+            return { username: userCache.username || '', token: userCache.token || '' };
+        }
+
+        async function setUser(username, token) {
+            userCache.username = username;
+            userCache.token = token;
+            await userDB.set(USER_KEY, username);
+            await userDB.set(TOKEN_KEY, token);
+        }
+
+        async function clearUser() {
+            userCache.username = '';
+            userCache.token = '';
+            userCache.trialStart = 0;
+            lastServerVerifyTime = 0;
+            await userDB.remove(USER_KEY);
+            await userDB.remove(TOKEN_KEY);
+            await userDB.remove(TRIAL_START_KEY);
+            if (trialTimer) clearTimeout(trialTimer);
+        }
+
+        async function verifyUserWithServer() {
+            const { username, token } = getUserInfo();
+            if (!username || !token) {
+                clearUser();
+                return false;
+            }
+            try {
+                const res = await fetch('/admin/api.php?action=verifyLogin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, token })
+                });
+                const data = await res.json();
+                if (data.code !== 0 || !data.valid) {
+                    console.log('账号校验失败:', data.msg);
+                    clearUser();
+                    showLoginRequired();
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.log('账号校验网络错误:', e);
+                // 网络错误时不强制清除，避免误杀
+                return true;
+            }
+        }
+
+        async function checkUserAccess(skipServerVerify = false) {
+            if (isLoggedIn()) {
+                // 首次加载先信任本地状态，避免 iOS 刷新时因网络/接口问题误清登录；
+                // 已登录时按 SERVER_VERIFY_INTERVAL 节流，短时间内不重复请求后端校验
+                const now = Date.now();
+                const needVerify = !skipServerVerify && (now - lastServerVerifyTime > SERVER_VERIFY_INTERVAL);
+                if (needVerify) {
+                    const valid = await verifyUserWithServer();
+                    if (!valid) {
+                        showLoginRequired();
+                        return false;
+                    }
+                    lastServerVerifyTime = Date.now();
+                }
+                console.log('用户已登录');
+                return true;
+            }
+
+            let trialStart = userCache.trialStart;
+            const now = Date.now();
+
+            if (!trialStart) {
+                trialStart = now;
+                userCache.trialStart = trialStart;
+                await userDB.set(TRIAL_START_KEY, trialStart.toString());
+                console.log('开始试用计时');
+            }
+
+            const elapsed = now - trialStart;
+            const remaining = TRIAL_DURATION - elapsed;
+
+            if (remaining <= 0) {
+                console.log('试用时间已到');
+                showLoginRequired();
+                return false;
+            }
+
+            console.log('试用剩余:', Math.ceil(remaining / 1000), '秒');
+            if (trialTimer) clearTimeout(trialTimer);
+            trialTimer = setTimeout(() => {
+                showLoginRequired();
+            }, remaining);
+
+            return true;
+        }
+
+        function showLoginRequired() {
+            const modal = document.getElementById('loginRequiredModal');
+            if (modal) modal.classList.add('active');
+        }
+
+        function renderLoginStatus() {
+            const statusEl = document.getElementById('loginStatus');
+            const userInfoEl = document.getElementById('userInfoStatus');
+            const loginBtn = document.getElementById('loginBtn');
+            if (isLoggedIn()) {
+                if (loginBtn) loginBtn.textContent = '永久会员';
+                if (statusEl) {
+                    statusEl.textContent = '当前状态：已登录';
+                    statusEl.style.background = 'rgba(46, 125, 50, 0.12)';
+                    statusEl.style.color = '#1b5e20';
+                }
+                if (userInfoEl) {
+                    userInfoEl.textContent = `账号：${userCache.username}`;
+                    userInfoEl.style.background = 'rgba(46, 125, 50, 0.12)';
+                    userInfoEl.style.color = '#1b5e20';
+                }
+            } else {
+                if (loginBtn) loginBtn.textContent = '免费用户';
+                const trialStart = userCache.trialStart || Date.now();
+                const remaining = Math.max(0, TRIAL_DURATION - (Date.now() - trialStart));
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                if (statusEl) {
+                    statusEl.textContent = `当前状态：试用中，剩余 ${minutes} 分 ${seconds.toString().padStart(2, '0')} 秒`;
+                    statusEl.style.background = 'rgba(255, 193, 7, 0.15)';
+                    statusEl.style.color = '#856404';
+                }
+                if (userInfoEl) {
+                    userInfoEl.textContent = '未登录';
+                    userInfoEl.style.background = 'rgba(255, 193, 7, 0.15)';
+                    userInfoEl.style.color = '#856404';
+                }
+            }
+        }
+
+        function openSettings() {
+            const loginForm = document.getElementById('loginForm');
+            const userInfoForm = document.getElementById('userInfoForm');
+            if (isLoggedIn()) {
+                if (loginForm) loginForm.style.display = 'none';
+                if (userInfoForm) userInfoForm.style.display = 'block';
+            } else {
+                if (loginForm) loginForm.style.display = 'block';
+                if (userInfoForm) userInfoForm.style.display = 'none';
+            }
+            renderLoginStatus();
+            openModal('settingsModal');
+        }
+
+        async function login() {
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const username = (usernameInput.value || '').trim();
+            const password = passwordInput.value || '';
+
+            if (!username || !password) {
+                alert('请输入账号和密码');
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/api.php?action=login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (data.code === 0 && data.token) {
+                    await setUser(data.username || username, data.token);
+                    lastServerVerifyTime = Date.now(); // 刚登录，短期内无需再次服务器校验
+                    await userDB.remove(TRIAL_START_KEY);
+                    userCache.trialStart = 0;
+                    if (trialTimer) clearTimeout(trialTimer);
+                    closeModal('settingsModal');
+                    closeModal('loginRequiredModal');
+                    usernameInput.value = '';
+                    passwordInput.value = '';
+                    alert('登录成功，感谢使用！');
+                    renderLoginStatus();
+                } else {
+                    alert(data.msg || '登录失败');
+                }
+            } catch (e) {
+                alert('网络错误，请重试');
+            }
+        }
+
+        async function logout() {
+            await clearUser();
+            renderLoginStatus();
+            closeModal('settingsModal');
+            alert('已退出登录');
+        }
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                // 登录提示弹窗禁止点击背景关闭
+                if (event.target.id === 'loginRequiredModal') return;
+                event.target.classList.remove('active');
+            }
+        };
+
+        initApis();
     </script>
+
+    <button id="resumePlayBtn" class="resume-play-btn" onclick="resumePlayback()" style="display: none;">
+        <span class="resume-play-icon">▶</span>
+        <span class="resume-play-text">继续播放</span>
+    </button>
 </body>
 </html>
