@@ -2179,6 +2179,12 @@
                 return url;
             }
 
+            // 已经是代理地址则直接返回，避免二次包装成 proxy.php?url=proxy.php?url=...
+            // 被后端判为“不支持的协议”，导致广告过滤等逻辑拿到错误响应
+            if (url.indexOf('proxy.php?url=') !== -1) {
+                return url;
+            }
+
             const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'];
             const ext = url.split('.').pop().toLowerCase().split('?')[0];
             const isImage = imageExtensions.includes(ext) || /\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)/i.test(url);
@@ -3922,20 +3928,45 @@
                 }
             }
 
+            // 起播看门狗：原生 HLS 遇到坏分片/坏源时常常只触发 waiting 而不触发 error，
+            // 会一直卡在 0 秒不报错，导致换线路逻辑永远不执行。这里超时后主动兜底换线路。
+            let startWatchdog = null;
+            function clearStartWatchdog() {
+                if (startWatchdog) {
+                    clearTimeout(startWatchdog);
+                    startWatchdog = null;
+                }
+            }
+            function armStartWatchdog() {
+                if (startWatchdog) return; // 已武装则不重复，避免连续 waiting 事件不断重置计时
+                startWatchdog = setTimeout(() => {
+                    startWatchdog = null;
+                    if (video !== videoPlayer.querySelector('video')) return;
+                    // 仍在起点、未真正开始播放、且不是用户主动暂停 → 判定当前线路起播失败
+                    if (!video.paused && !video.ended && video.currentTime < 0.5 && video.readyState < 3) {
+                        console.warn('[播放看门狗] 起播超时(12s)，触发换线路/重试');
+                        handlePlayFailure(videoPlayer);
+                    }
+                }, 12000);
+            }
+
             video.addEventListener('play', () => {
                 wasPausedByUser = false;
                 clearStuckTimer();
+                armStartWatchdog();
             });
 
             video.addEventListener('playing', () => {
                 lastTime = video.currentTime;
                 clearStuckTimer();
+                clearStartWatchdog();
             });
 
             video.addEventListener('timeupdate', () => {
                 if (video.currentTime > lastTime) {
                     lastTime = video.currentTime;
                     clearStuckTimer();
+                    clearStartWatchdog();
                 }
             });
 
@@ -3949,6 +3980,8 @@
             video.addEventListener('waiting', () => {
                 console.log('[播放缓冲] waiting 事件，当前时间:', video.currentTime);
                 lastTime = video.currentTime;
+                // 起播阶段卡在 0 秒：武装看门狗，超时未起播则换线路
+                if (video.currentTime < 1 && !video.paused && !video.ended) armStartWatchdog();
                 if (!video.paused && !video.ended) {
                     setTimeout(() => {
                         if (video.buffered.length > 0) {

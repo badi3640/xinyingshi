@@ -78,10 +78,11 @@ export async function onRequest(context) {
     if (accept) headers.set('Accept', accept);
 
     // 带重试与首字节超时的上游请求：
-    // 国内网络到源站偶发超时/连接失败/5xx，重试可显著提升播放与加载成功率
-    const MAX_ATTEMPTS = 2;
+    // 采集站视频 CDN 经常出现“瞬时” 403/404/5xx/超时——同一地址隔一两秒重试即成功，
+    // 因此对可重试状态码做多轮重试，是提升播放成功率的关键。
+    const MAX_ATTEMPTS = 3;
     // 首字节超时：拿到响应头后立即取消，不会中断后续 body 的流式传输
-    const ttfbTimeout = isVideo ? 15000 : 8000;
+    const ttfbTimeout = isVideo ? 25000 : 15000;
     let resp = null;
     let lastErr = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -97,10 +98,16 @@ export async function onRequest(context) {
                 },
             });
             clearTimeout(timer);
-            // 5xx / 429 视为临时错误，未到最后一次时重试
-            if ((r.status >= 500 || r.status === 429) && attempt < MAX_ATTEMPTS) {
+            // 可重试的“瞬时”错误：5xx / 429 / 408，以及媒体(m3u8/ts/视频)的 403 / 404
+            // 图片的 403/404 直接走占位图，无需重试
+            const transientStatus =
+                r.status >= 500 ||
+                r.status === 429 ||
+                r.status === 408 ||
+                (!isImage && (r.status === 403 || r.status === 404));
+            if (transientStatus && attempt < MAX_ATTEMPTS) {
                 lastErr = new Error('HTTP ' + r.status);
-                await sleep(250 * attempt);
+                await sleep(300 * attempt);
                 continue;
             }
             resp = r;
@@ -109,7 +116,7 @@ export async function onRequest(context) {
             clearTimeout(timer);
             lastErr = err;
             if (attempt < MAX_ATTEMPTS) {
-                await sleep(250 * attempt);
+                await sleep(300 * attempt);
                 continue;
             }
         }
@@ -117,12 +124,15 @@ export async function onRequest(context) {
 
     if (!resp) {
         if (isImage) return placeholderGif();
-        return jsonResp({ code: 0, msg: '请求失败: ' + (lastErr && lastErr.message ? lastErr.message : 'unknown') });
+        // 媒体最终失败：返回 502（非 200），让播放器触发 error → 自动换线路/换源，
+        // 而不是拿到 200 的 JSON 把它当 m3u8 解析导致一直卡死
+        return errorResponse(502, 'upstream fetch failed: ' + (lastErr && lastErr.message ? lastErr.message : 'unknown'));
     }
 
     if (!resp.ok && isImage) return placeholderGif();
     if (!resp.ok && !isImage) {
-        return jsonResp({ code: 0, msg: 'HTTP错误: ' + resp.status });
+        // 透传为 502 错误状态（而非 200+JSON），播放器据此判定失败并换线路
+        return errorResponse(502, 'upstream error: ' + resp.status);
     }
 
     const contentType = resp.headers.get('Content-Type') || '';
@@ -280,6 +290,19 @@ function jsonResp(data, status = 200) {
         status,
         headers: {
             'Content-Type': 'application/json; charset=utf-8',
+            ...corsHeaders(),
+        },
+    });
+}
+
+// 媒体请求失败时返回真实的错误状态码（非 200），
+// 让原生 HLS / hls.js 触发 error 事件从而自动换线路，而不是把错误体当成播放列表卡死
+function errorResponse(status, message) {
+    return new Response(message || 'error', {
+        status: status || 502,
+        headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-store',
             ...corsHeaders(),
         },
     });
