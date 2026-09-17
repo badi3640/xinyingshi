@@ -80,9 +80,12 @@ export async function onRequest(context) {
     // 带重试与首字节超时的上游请求：
     // 采集站视频 CDN 经常出现“瞬时” 403/404/5xx/超时——同一地址隔一两秒重试即成功，
     // 因此对可重试状态码做多轮重试，是提升播放成功率的关键。
-    const MAX_ATTEMPTS = 3;
-    // 首字节超时：拿到响应头后立即取消，不会中断后续 body 的流式传输
-    const ttfbTimeout = isVideo ? 25000 : 15000;
+    // 采集站 CDN 频繁出现“瞬时” 403/404/5xx/超时，同一地址往往隔数秒即恢复。
+    // 增加重试次数并采用指数退避 + 抖动，覆盖更长的瞬时错误窗口，显著降低播放失败率。
+    const MAX_ATTEMPTS = 6;
+    // 首字节超时：拿到响应头后立即取消，不会中断后续 body 的流式传输。
+    // Cloudflare 出口到部分 CDN 首字节较慢，适当放宽，避免把“慢但成功”的响应误判为超时。
+    const ttfbTimeout = isVideo ? 30000 : 20000;
     let resp = null;
     let lastErr = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -107,7 +110,10 @@ export async function onRequest(context) {
                 (!isImage && (r.status === 403 || r.status === 404));
             if (transientStatus && attempt < MAX_ATTEMPTS) {
                 lastErr = new Error('HTTP ' + r.status);
-                await sleep(300 * attempt);
+                // 指数退避 + 抖动：400ms → 800ms → 1.6s → 3.2s → 4s(封顶)，抖动 ±50% 错开并发
+                const base = Math.min(400 * Math.pow(2, attempt - 1), 4000);
+                const jitter = base * (0.5 + Math.random());
+                await sleep(Math.round(base + jitter));
                 continue;
             }
             resp = r;
@@ -116,7 +122,9 @@ export async function onRequest(context) {
             clearTimeout(timer);
             lastErr = err;
             if (attempt < MAX_ATTEMPTS) {
-                await sleep(300 * attempt);
+                const base = Math.min(400 * Math.pow(2, attempt - 1), 4000);
+                const jitter = base * (0.5 + Math.random());
+                await sleep(Math.round(base + jitter));
                 continue;
             }
         }
