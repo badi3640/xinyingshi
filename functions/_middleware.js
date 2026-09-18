@@ -5,7 +5,7 @@
 // 说明：首页 index.html 体积大(177KB)且不便整文件重写，因此这里在边缘层注入修复，
 // 无需改动首页源码。守卫脚本会：
 //   1) 重写 HTMLMediaElement.prototype.play —— 任意新视频播放时，先暂停上一个正在播放的视频；
-//   2) 在页面切后台(visibilitychange)/卸载(pagehide)时暂停全部视频；
+//   2) 手机切后台(visibilitychange)/卸载(pagehide)时暂停全部视频（省电）；电脑切后台保持播放；
 //   3) 监听 #detailView 被隐藏(返回列表)时暂停全部视频。
 // 这样无论旧片声音残留源于哪种触发路径，都只会保留“当前”那一个视频出声。
 //
@@ -71,11 +71,20 @@ export async function onRequest(context) {
       activeVideo = this;
       return origPlay.apply(this, arguments);
     };
+    function isMobile(){
+      try {
+        var ua = navigator.userAgent || '';
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Windows Phone/i.test(ua)
+          || (navigator.maxTouchPoints > 0 && /Macintosh/.test(ua));
+      } catch(e){ return false; }
+    }
     function pauseAll(){
       var vs = document.querySelectorAll('video');
       for (var i=0;i<vs.length;i++){ try{ vs[i].pause(); }catch(e){} }
     }
-    document.addEventListener('visibilitychange', function(){ if (document.hidden) pauseAll(); });
+    // 电脑切后台/最小化：保持正常播放（仅静音守卫防双片同声）；
+    // 手机切后台/最小化：暂停以省电（页面卸载 pagehide 时两者都暂停）。
+    document.addEventListener('visibilitychange', function(){ if (document.hidden && isMobile()) pauseAll(); });
     window.addEventListener('pagehide', pauseAll);
     var dv = document.getElementById('detailView');
     if (dv && dv.style.display === 'none') pauseAll();
