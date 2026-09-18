@@ -179,12 +179,30 @@ export async function onRequest(context) {
     }
 
     // ---- 视频 / 其他响应：透传 ----
+    // 本分支处理 API / 未知类型响应（非图片、非 m3u8、非已知视频扩展名）。
+    // 苹果CMS等后端常把 JSON 以 text/html; charset=utf-8 返回，这里探测并纠正为
+    // application/json，避免下游中间件/前端将其误判为 HTML 页面而包裹或解析失败。
     const newHeaders = new Headers(resp.headers);
-    newHeaders.set('Content-Type', contentType || 'application/octet-stream');
+    let finalContentType = contentType || 'application/octet-stream';
+    if (finalContentType.toLowerCase().includes('text/html')) {
+        // 仅对 text/html 做 JSON 探测；非 text/html 的响应保持原样流式透传（避免大文件缓冲）。
+        const bodyText = await resp.text();
+        const trimmed = bodyText.trimStart();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            finalContentType = 'application/json; charset=utf-8';
+        }
+        newHeaders.set('Content-Type', finalContentType);
+        newHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        applyCors(newHeaders);
+        newHeaders.delete('Transfer-Encoding');
+        newHeaders.delete('Connection');
+        return new Response(bodyText, { status: resp.status, headers: newHeaders });
+    }
+    // 非 text/html（如真实二进制流）：保持流式透传，避免大文件缓冲
+    newHeaders.set('Content-Type', finalContentType);
     newHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     if (resp.status === 206) newHeaders.set('Accept-Ranges', 'bytes');
     applyCors(newHeaders);
-    // 移除 hop-by-hop 头
     newHeaders.delete('Transfer-Encoding');
     newHeaders.delete('Connection');
     return new Response(resp.body, { status: resp.status, headers: newHeaders });
