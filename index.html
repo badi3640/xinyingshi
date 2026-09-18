@@ -3942,6 +3942,79 @@
                                     }
                                 }
                             });
+
+                            // 画面停滞看门狗：最小化/后台过久或长时间播放后，可能出现“有声无画”
+                            // （音频继续走、视频帧停止刷新，恢复前台后解码器未重新同步）。
+                            // 仅前台检测，避免后台渲染节流误判；分级恢复：轻推 seek -> recoverMediaError -> 切线路。
+                            let stallChecks = 0;
+                            let stallNudges = 0;
+                            let lastFrameCount = -1;
+                            let lastCurrentTime = -1;
+                            const MAX_STALL_NUDGES = 4;
+
+                            function totalVideoFrames() {
+                                try {
+                                    if (video.getVideoPlaybackQuality) return video.getVideoPlaybackQuality().totalVideoFrames;
+                                    if (typeof video.webkitDecodedFrameCount === 'number') return video.webkitDecodedFrameCount;
+                                } catch (e) {}
+                                return -1;
+                            }
+
+                            function isForeground() {
+                                return document.visibilityState === 'visible' && !document.hidden;
+                            }
+
+                            const stallWatchdogTimer = setInterval(() => {
+                                if (!video || currentHls !== hls) { clearInterval(stallWatchdogTimer); return; }
+                                const frames = totalVideoFrames();
+                                if (!isForeground() || video.paused || video.ended || frames < 0) {
+                                    lastFrameCount = frames;
+                                    lastCurrentTime = video.currentTime;
+                                    stallChecks = 0;
+                                    return;
+                                }
+                                if (frames !== lastFrameCount || video.currentTime === lastCurrentTime) {
+                                    // 帧在刷新（正常）；或时间没走（属缓冲等待，由其它逻辑处理）
+                                    stallChecks = 0;
+                                    if (stallNudges > 0 && frames !== lastFrameCount) stallNudges = 0;
+                                    lastFrameCount = frames;
+                                    lastCurrentTime = video.currentTime;
+                                    return;
+                                }
+                                // 前台、时间在走、帧数不变 → 疑似“有声无画”，连续 2 次（约 4 秒）确认后恢复
+                                stallChecks++;
+                                lastFrameCount = frames;
+                                lastCurrentTime = video.currentTime;
+                                if (stallChecks < 2) return;
+                                stallChecks = 0;
+                                stallNudges++;
+                                const nearEnd = video.duration && isFinite(video.duration) && video.duration - video.currentTime < 1;
+                                console.warn('[画面看门狗] 检测到视频帧停滞，时间在走但帧不动，第', stallNudges, '次恢复, t=', video.currentTime);
+                                if (stallNudges >= MAX_STALL_NUDGES) {
+                                    console.error('[画面看门狗] 恢复超限，切换线路');
+                                    clearInterval(stallWatchdogTimer);
+                                    hls.destroy();
+                                    currentHls = null;
+                                    handlePlayFailure(videoPlayer);
+                                } else if (stallNudges >= 3) {
+                                    try { hls.recoverMediaError(); } catch (e) {}
+                                    setTimeout(() => { if (currentHls === hls) { try { hls.startLoad(); } catch (e) {} } }, 200);
+                                } else if (!nearEnd) {
+                                    // 轻推 seek 强制解码器重新同步
+                                    video.currentTime = video.currentTime + (stallNudges === 1 ? 0.1 : 0.25);
+                                }
+                            }, 2000);
+
+                            const onVisChange = () => {
+                                if (currentHls !== hls) { document.removeEventListener('visibilitychange', onVisChange); return; }
+                                if (isForeground()) {
+                                    // 回到前台重新采样基线，给解码器一点恢复时间，避免误判
+                                    lastFrameCount = totalVideoFrames();
+                                    lastCurrentTime = video ? video.currentTime : -1;
+                                    stallChecks = 0;
+                                }
+                            };
+                            document.addEventListener('visibilitychange', onVisChange);
                         } catch (error) {
                             console.error('HLS Init Error:', error);
                         }
