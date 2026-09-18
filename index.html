@@ -3228,6 +3228,58 @@
             }
         }
 
+        // 解析第三方分享页 / iframe 播放页，提取其中真实可播放的 m3u8/mp4 地址。
+        // 很多源（如 v.lzcdn27.com/share/...、vip.ffzy-plays.com/share/...）返回的并非直接媒体地址，
+        // 而是含 <video src> 或播放器配置（url: "..."）的 HTML 页面，需要抓取后提取。
+        async function resolvePlayUrl(pageUrl) {
+            if (isDirectMediaUrl(pageUrl)) return pageUrl;
+            try {
+                const res = await fetch(getProxyUrl(pageUrl));
+                if (!res.ok) {
+                    console.warn('[线路解析] 页面请求失败:', res.status, pageUrl);
+                    return null;
+                }
+                const html = await res.text();
+                let base;
+                try { base = new URL(pageUrl).href; } catch (e) { base = pageUrl; }
+
+                const candidates = [];
+                const seen = new Set();
+                const push = (u) => {
+                    if (!u) return;
+                    let abs;
+                    try { abs = new URL(u, base).href; } catch (e) { abs = u; }
+                    if (!seen.has(abs) && /(\.m3u8|\.mp4|\.flv|\.mkv)(\?.*)?$/i.test(abs)) {
+                        seen.add(abs);
+                        candidates.push(abs);
+                    }
+                };
+
+                // 1) 引号包裹的链接（<video src="...">、playurl: "..." 等）
+                let m;
+                const re1 = /["']([^"']+\.(?:m3u8|mp4|flv|mkv)(?:\?[^"']*)?)["']/gi;
+                while ((m = re1.exec(html))) push(m[1]);
+                // 2) src= / data-src= / url( 形式（可无引号）
+                const re2 = /(?:src|data-src|url)\s*[=:]\s*["']?([^"'\s)>]+\.(?:m3u8|mp4|flv|mkv)[^"'\s)>]*)/gi;
+                while ((m = re2.exec(html))) push(m[1]);
+
+                if (candidates.length === 0) {
+                    console.warn('[线路解析] 页面中未找到可播放地址:', pageUrl);
+                    return null;
+                }
+                // 优先选 index.m3u8 > 普通 m3u8 > mp4
+                candidates.sort((a, b) => {
+                    const sc = (s) => (s.includes('index.m3u8') ? 4 : 0) + (/\.m3u8/i.test(s) ? 2 : 0) + (/\.mp4/i.test(s) ? 1 : 0);
+                    return sc(b) - sc(a);
+                });
+                console.log('[线路解析] 候选地址:', candidates.length, '选用:', candidates[0]);
+                return candidates[0];
+            } catch (e) {
+                console.error('[线路解析] 解析失败:', e);
+                return null;
+            }
+        }
+
         function renderAllServers(movie) {
             const container = document.getElementById('allServers');
 
@@ -3269,10 +3321,17 @@
                 }
             });
 
-            // 只保留包含可直接播放地址的线路，过滤掉 iframe/第三方播放器页面
-            const directServers = validServers.filter(s => s.episodes.some(ep => isDirectMediaUrl(ep.url)));
-            // 前端只展示第一条可播放线路，后台仍保留其他线路用于自动切换
-            const displayServers = directServers.length > 0 ? [directServers[0]] : [];
+            // 保留所有含可解析地址的线路（含第三方分享页/iframe 播放页，播放时再解析真实 m3u8，不再整条过滤掉）
+            // 排序：含直接媒体地址的线路优先（自动播放/自动切换更快），其后才是需解析的分享页线路
+            const ordered = [];
+            const rest = [];
+            validServers.forEach((s) => {
+                if (s.episodes.some((ep) => isDirectMediaUrl(ep.url))) ordered.push(s);
+                else rest.push(s);
+            });
+            const directServers = ordered.concat(rest);
+            // 前端展示全部可用线路，用户可手动切换；后台也保留全部用于自动切换与解析兜底
+            const displayServers = directServers;
 
             movie._playServers = directServers.map(s => s.urls);
             movie._playServerNames = directServers.map(s => s.name);
@@ -3288,7 +3347,7 @@
                 return;
             }
 
-            container.innerHTML = displayServers.map((server) => `
+            container.innerHTML = displayServers.map((server, sIdx) => `
                 <div class="server-section">
                     <div class="server-header">
                         <div class="server-name">${escapeHtml(server.name)}</div>
@@ -3302,7 +3361,7 @@
                             return `
                             <li class="episode-item"
                                 data-url="${safeUrl}"
-                                data-server-index="0"
+                                data-server-index="${sIdx}"
                                 data-episode-index="${epIndex}"
                                 data-title="${safeFullTitle}"
                                 title="${safeFullTitle}">
@@ -3785,6 +3844,24 @@
             if (!url) {
                 videoPlayer.innerHTML = '<div class="placeholder">暂无播放地址</div>';
                 return;
+            }
+
+            // 非直接播放地址（第三方分享页 / iframe 播放页）：尝试解析出真实 m3u8 后再播放
+            if (!isDirectMediaUrl(url)) {
+                videoPlayer.innerHTML = '<div class="placeholder">正在解析播放地址...</div>';
+                let resolved = null;
+                try {
+                    resolved = await resolvePlayUrl(url);
+                } catch (e) {
+                    console.error('[线路解析] 异常:', e);
+                }
+                if (!resolved) {
+                    console.warn('[线路解析] 无法解析该线路，尝试切换线路:', url);
+                    handlePlayFailure(videoPlayer);
+                    return;
+                }
+                console.log('[线路解析] 成功解析:', url, '->', resolved);
+                url = resolved;
             }
 
             if (currentHls) {
