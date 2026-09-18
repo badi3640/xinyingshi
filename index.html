@@ -3482,40 +3482,108 @@
                     return blobUrl;
                 }
 
-                // 普通媒体 m3u8：按绝对序号 >100000 或相对基准过滤 ts
-                const filtered = [];
-                let changed = false;
-                let adCount = 0;
-                let firstTsNum = null;
+                // 普通媒体 m3u8：过滤广告分段（路径换源贴片 / 关键词 / 序号跳变）
+                const AD_KEYWORDS = ['/ad/', '/ads/', 'advert', 'preroll', '/ad-', 'doubleclick', 'googleads', 'adserver', '/vast/', '/promo/', '/spot/', '_ad.', 'adbreak', '/adv/', '/adx/'];
 
+                // 第一遍：收集所有 ts 分段及其目录、序号
+                const tsEntries = [];
+                let pendingExtinf = null;
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
-
                     if (line.startsWith('#EXTINF')) {
-                        filtered.push(line);
+                        pendingExtinf = line;
                         continue;
                     }
+                    if (/\.ts/i.test(line) && !line.startsWith('#')) {
+                        const u = line.split('?')[0];
+                        const dir = u.substring(0, u.lastIndexOf('/'));
+                        tsEntries.push({ extinf: pendingExtinf, url: line, dir: dir, origIndex: i, isAd: false });
+                        pendingExtinf = null;
+                        continue;
+                    }
+                    pendingExtinf = null; // 其它标签/注释不绑定到 ts
+                }
 
-                    if (/\.ts/i.test(line)) {
-                        const num = extractTsNumber(line);
-                        if (firstTsNum === null) firstTsNum = num;
+                // 主目录 = ts 路径众数（贴片通常与正片处于不同目录）
+                const dirCount = {};
+                let mainDir = '';
+                let mainDirCount = -1;
+                for (const e of tsEntries) {
+                    dirCount[e.dir] = (dirCount[e.dir] || 0) + 1;
+                    if (dirCount[e.dir] > mainDirCount) {
+                        mainDirCount = dirCount[e.dir];
+                        mainDir = e.dir;
+                    }
+                }
+                const firstTsNum = tsEntries.length ? extractTsNumber(tsEntries[0].url) : null;
 
-                        // 广告 ts：序号本身超过 100000，或比首片序号突增超过阈值
-                        if (num !== null && (num > 100000 || (firstTsNum !== null && num - firstTsNum > relativeThreshold))) {
-                            changed = true;
-                            adCount++;
-                            console.log('[广告过滤] 过滤广告 ts:', line, '首片:', firstTsNum, '当前:', num);
-                            // 同时删除前一行对应的 #EXTINF
-                            if (filtered.length > 0 && filtered[filtered.length - 1].startsWith('#EXTINF')) {
-                                filtered.pop();
-                            }
+                let changed = false;
+                let adCount = 0;
+                for (const e of tsEntries) {
+                    let isAd = false;
+                    const reason = [];
+                    // 1) 目录与正片主目录不同（换源贴片）
+                    if (e.dir && mainDir && e.dir !== mainDir) { isAd = true; reason.push('dir'); }
+                    // 2) URL 命中广告关键词
+                    const low = e.url.toLowerCase();
+                    if (AD_KEYWORDS.some(k => low.includes(k))) { isAd = true; reason.push('kw'); }
+                    // 3) 序号跳变（保留原逻辑）
+                    const num = extractTsNumber(e.url);
+                    if (num !== null && (num > 100000 || (firstTsNum !== null && num - firstTsNum > relativeThreshold))) { isAd = true; reason.push('seq'); }
+                    e.isAd = isAd;
+                    if (isAd) { changed = true; adCount++; console.log('[广告过滤] 过滤广告 ts:', e.url, '原因:', reason.join(',')); }
+                }
+
+                // 第二遍：按原始顺序重建，剔除广告 ts 及对应 EXTINF，并清理悬挂的 DISCONTINUITY
+                const tsIndexByLine = {};
+                for (const e of tsEntries) tsIndexByLine[e.origIndex] = e;
+
+                const raw = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.startsWith('#EXTINF')) {
+                        // 找到紧随其后的 ts 行（跳过 BYTERANGE 等中间标签）
+                        let j = i + 1;
+                        while (j < lines.length && lines[j].startsWith('#') && !/\.ts/i.test(lines[j])) j++;
+                        if (j < lines.length && /\.ts/i.test(lines[j]) && !lines[j].startsWith('#')) {
+                            const entry = tsIndexByLine[j];
+                            if (entry && entry.isAd) { i = j; continue; } // 跳过广告 ts 及其 EXTINF
+                            raw.push(line);
+                            for (let k = i + 1; k < j; k++) raw.push(lines[k]);
+                            raw.push(resolveTsUrl(lines[j]));
+                            i = j;
                             continue;
                         }
-                        filtered.push(resolveTsUrl(line));
+                        raw.push(line);
                         continue;
                     }
+                    if (/\.ts/i.test(line) && !line.startsWith('#')) {
+                        const entry = tsIndexByLine[i];
+                        if (entry && entry.isAd) continue;
+                        raw.push(resolveTsUrl(line));
+                        continue;
+                    }
+                    if (line.startsWith('#EXT-X-DISCONTINUITY')) {
+                        raw.push(line);
+                        continue;
+                    }
+                    raw.push(line);
+                }
 
-                    filtered.push(line);
+                // DISCONTINUITY 仅保留位于两个保留 ts 之间的；贴片整块被剔除后产生的悬挂项删除
+                const isTsLine = (l) => typeof l === 'string' && /\.ts($|\?)/i.test(l);
+                const prevTs = (arr, k) => { for (let m = k - 1; m >= 0; m--) { if (isTsLine(arr[m])) return true; if (arr[m].startsWith('#EXTINF')) continue; if (arr[m].startsWith('#EXT-X-DISCONTINUITY')) continue; } return false; };
+                const nextTs = (arr, k) => { for (let m = k + 1; m < arr.length; m++) { if (isTsLine(arr[m])) return true; if (arr[m].startsWith('#EXTINF')) continue; if (arr[m].startsWith('#EXT-X-DISCONTINUITY')) continue; } return false; };
+
+                const filtered = [];
+                for (let k = 0; k < raw.length; k++) {
+                    const cur = raw[k];
+                    if (cur.startsWith('#EXT-X-DISCONTINUITY')) {
+                        if (prevTs(raw, k) && nextTs(raw, k)) filtered.push(cur);
+                        else { changed = true; console.log('[广告过滤] 移除悬挂 DISCONTINUITY'); }
+                        continue;
+                    }
+                    filtered.push(cur);
                 }
 
                 console.log('[广告过滤] 广告 ts 数量:', adCount, '是否变化:', changed);
@@ -3771,6 +3839,16 @@
 
                             function tryRestorePosition() {
                                 if (recoverTime > 0 && video) {
+                                    // 不打断正在正常播放的画面
+                                    if (!video.paused) return;
+                                    // 接近片尾的恢复点会导致“播完即重头播放”，直接放弃
+                                    const dur = (video.duration && isFinite(video.duration)) ? video.duration : Infinity;
+                                    if (recoverTime >= dur - 1) {
+                                        console.log('[HLS 恢复] 恢复点接近片尾，放弃恢复避免重头播放:', recoverTime, '片长:', dur);
+                                        recoverTime = 0;
+                                        seekAttempts = 0;
+                                        return;
+                                    }
                                     if (Math.abs(video.currentTime - recoverTime) > 1) {
                                         video.currentTime = recoverTime;
                                         seekAttempts++;
@@ -3823,7 +3901,12 @@
                                 if (data.fatal) {
                                     switch(data.type) {
                                         case Hls.ErrorTypes.MEDIA_ERROR:
-                                            recoverTime = lastKnownTime || (video ? (video.currentTime || 0) : 0);
+                                            // 记录断点用于恢复，但钳制到片尾前 2 秒，避免恢复到末尾引发“重头播放/重复片段”
+                                            let rt = lastKnownTime || (video ? (video.currentTime || 0) : 0);
+                                            if (video && video.duration && isFinite(video.duration) && rt > video.duration - 2) {
+                                                rt = video.duration - 2;
+                                            }
+                                            recoverTime = rt;
                                             seekAttempts = 0;
                                             mediaErrorRecoverCount++;
                                             console.log('[HLS 恢复] 媒体错误，记录播放位置:', recoverTime, '第', mediaErrorRecoverCount, '次');
