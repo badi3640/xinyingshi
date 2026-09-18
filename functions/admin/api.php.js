@@ -27,6 +27,7 @@ import {
 // ============ 主入口 ============
 
 export async function onRequest(context) {
+ try {
     const { request, env } = context;
     const url = new URL(request.url);
     const action = url.searchParams.get('action') || '';
@@ -67,6 +68,12 @@ export async function onRequest(context) {
         case 'login':         return handleLogin(input, kv, request);
         default:              return jsonResponse({ code: 1, msg: '未知操作' });
     }
+ } catch (err) {
+    // 任何未预期异常都返回 JSON 500，避免泄露 Cloudflare 默认 HTML 错误页
+    // （否则前端 response.json() 会抛 SyntaxError: Unexpected token '<'）
+    console.error('[api.php] 未捕获异常:', err && (err.stack || err.message) || err);
+    return jsonResponse({ code: 1, msg: '服务器内部错误', detail: String((err && err.message) || err) }, 500);
+ }
 }
 
 // ============ 管理员认证 ============
@@ -256,7 +263,7 @@ async function handleVerifyLogin(input, kv) {
     }
 
     // 强制读取最新账号数据，避免 KV 边缘缓存导致的误判掉线
-    const accounts = await getAccounts(kv, 0);
+    const accounts = await getAccounts(kv, true);
     if (!accounts[username]) {
         return jsonResponse({ code: 1, msg: '账号不存在', valid: false });
     }
@@ -276,7 +283,7 @@ async function handleLogin(input, kv, request) {
         return jsonResponse({ code: 1, msg: '请输入账号和密码' });
     }
 
-    const accounts = await getAccounts(kv, 0);
+    const accounts = await getAccounts(kv, true);
     if (!accounts[username]) {
         return jsonResponse({ code: 1, msg: '账号不存在' });
     }
