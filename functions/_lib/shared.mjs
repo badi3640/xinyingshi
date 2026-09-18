@@ -79,10 +79,12 @@ export async function saveConfig(kv, config) {
 
 // ============ KV 账号管理 ============
 
-export async function getAccounts(kv, cacheTtl) {
-    // cacheTtl=0 可强制读取最新数据（绕过 KV 边缘 60s 缓存），
-    // 用于登录/校验等对一致性敏感、且刚生成的账号需立即可读的场景
-    const options = typeof cacheTtl === 'number' ? { type: 'json', cacheTtl } : { type: 'json' };
+export async function getAccounts(kv, noCache) {
+    // noCache=true 强制读取最新数据（绕过 KV 边缘缓存），
+    // 用于登录/校验等对一致性敏感、且刚生成的账号需立即可读的场景。
+    // 注意：KV get 的 cacheTtl 选项要求值 >= 60，传 0 会抛错导致接口返回 500(HTML)，
+    // 正确做法是使用 noCache:true。
+    const options = noCache ? { type: 'json', noCache: true } : { type: 'json' };
     const data = await kv.get('accounts', options);
     return data || {};
 }
