@@ -3664,12 +3664,87 @@
             el.addEventListener('click', onClick);
         }
 
+        // ===== 播放器全局键盘快捷键 =====
+        // 根因：<video controls> 的原生快捷键只在 video 获焦时生效；点击自定义控制栏/页面其它元素后
+        // 焦点被夺走，空格/方向键失灵。这里在 document 捕获阶段统一拦截，无论焦点在哪都能控制当前视频；
+        // 输入框/搜索框内不拦截，保证正常输入。preventDefault 同时抑制原生 media 默认动作，避免双击。
+        function togglePlayerFullscreen(el) {
+            try {
+                const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+                const exitFn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+                const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+                if (!fsEl) { if (fn) fn.call(el); }
+                else if (exitFn) { exitFn.call(document); }
+            } catch (e) {}
+        }
+
+        function bindPlayerHotkeys() {
+            if (window.__playerHotkeysBound) return;
+            window.__playerHotkeysBound = true;
+            document.addEventListener('keydown', function(e) {
+                const ae = document.activeElement;
+                if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+                const v = document.getElementById('mainVideo');
+                if (!v) return;
+                const vp = document.getElementById('videoPlayer');
+                if (!vp || vp.style.display === 'none') return;
+                const k = e.key;
+                let handled = true;
+                switch (k) {
+                    case ' ':
+                    case 'Spacebar':
+                    case 'k':
+                    case 'K':
+                        if (v.paused) v.play().catch(function() {}); else v.pause();
+                        break;
+                    case 'ArrowLeft':
+                    case 'j':
+                    case 'J':
+                        v.currentTime = Math.max(0, v.currentTime - 5);
+                        break;
+                    case 'ArrowRight':
+                    case 'l':
+                    case 'L':
+                        if (v.duration && isFinite(v.duration)) v.currentTime = Math.min(v.duration, v.currentTime + 5);
+                        else v.currentTime = v.currentTime + 5;
+                        break;
+                    case 'ArrowUp':
+                        v.muted = false;
+                        v.volume = Math.min(1, (v.volume || 0) + 0.1);
+                        break;
+                    case 'ArrowDown':
+                        v.volume = Math.max(0, (v.volume || 0) - 0.1);
+                        break;
+                    case 'm':
+                    case 'M':
+                        v.muted = !v.muted;
+                        break;
+                    case 'f':
+                    case 'F':
+                        togglePlayerFullscreen(v);
+                        break;
+                    case 'Home':
+                        v.currentTime = 0;
+                        break;
+                    case 'End':
+                        if (v.duration && isFinite(v.duration)) v.currentTime = v.duration;
+                        break;
+                    default:
+                        handled = false;
+                }
+                if (handled) { e.preventDefault(); e.stopPropagation(); }
+            }, true);
+        }
+
         async function playVideo(url, serverIndex, episodeIndex, isAutoRetry = false) {
             const canUse = await checkUserAccess();
             if (!canUse) {
                 showLoginRequired();
                 return;
             }
+
+            // 绑定一次全局播放快捷键（焦点不在 video 上也能用）
+            bindPlayerHotkeys();
 
             const videoPlayer = document.getElementById('videoPlayer');
 
