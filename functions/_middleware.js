@@ -8,8 +8,29 @@
 //   2) 在页面切后台(visibilitychange)/卸载(pagehide)时暂停全部视频；
 //   3) 监听 #detailView 被隐藏(返回列表)时暂停全部视频。
 // 这样无论旧片声音残留源于哪种触发路径，都只会保留“当前”那一个视频出声。
+//
+// ⚠️ 关键修复（xin.jikeyun.chat 显示“加载失败，请检查接口”）：
+// 音频守卫只能注入到“真实 HTML 页面”。proxy.php / admin/api.php 等 API、代理端点返回的是
+// JSON / m3u8 / 流媒体，绝不能当作 HTML 包裹——否则会把接口 JSON 包进 <script> 破坏数据，
+// 导致前端 response.json() 失败而显示“加载失败，请检查接口”。
+// 因此先按请求路径排除这些 API/代理端点，再对剩余 text/html 做兜底判断（无 <html>/<!doctype> 视为非页面）。
 
 export async function onRequest(context) {
+    const { request } = context;
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    // API / 代理端点：直接放行，不做任何 HTML 包裹处理。
+    // Cloudflare Pages 把 functions/proxy.php.js 映射为 /proxy.php、
+    // functions/admin/api.php.js 映射为 /admin/api.php。
+    if (
+        pathname === '/proxy.php' ||
+        pathname.startsWith('/admin/') ||
+        pathname.startsWith('/api/')
+    ) {
+        return context.next();
+    }
+
     const response = await context.next();
 
     const contentType = response.headers.get('content-type') || '';
@@ -26,6 +47,13 @@ export async function onRequest(context) {
 
     // 已注入则跳过，避免重复
     if (html.includes('__AUDIO_GUARD__')) {
+        return response;
+    }
+
+    // 兜底：仅当响应确实是 HTML 文档时才注入守卫。
+    // 个别后端（如苹果CMS）会把 JSON 以 text/html 返回，这类响应没有 <html>/<!doctype>，
+    // 应原样透传，绝不能裹上 <script> 破坏 JSON。
+    if (!/<!doctype|<html/i.test(html)) {
         return response;
     }
 
