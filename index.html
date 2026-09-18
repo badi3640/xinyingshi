@@ -3495,8 +3495,24 @@
                 // 如果当前 m3u8 本身走代理，则后续相对路径 ts 也应继续走代理
                 const isProxyM3u8 = m3u8Url.includes('proxy.php?url=');
                 function resolveTsUrl(line) {
-                    if (/^https?:\/\//i.test(line)) return line;
-                    const absoluteUrl = resolveUrl(baseUrl, line);
+                    const trimmed = line.trim();
+                    // 已是被代理的子清单/分片（形如 proxy.php?url=ENCODED(realUrl)，可能相对也可能绝对）：
+                    // 直接提取内层真实地址，再用 getProxyUrl 重新包装为本站绝对代理地址，
+                    // 避免被 re-anchor 到远程 CDN 主机（如 https://cdn.../proxy.php?url=...）导致 404。
+                    const PROXY_MARK = 'proxy.php?url=';
+                    const pIdx = trimmed.indexOf(PROXY_MARK);
+                    if (pIdx !== -1) {
+                        try {
+                            const inner = decodeURIComponent(trimmed.slice(pIdx + PROXY_MARK.length));
+                            if (inner && /^https?:\/\//i.test(inner)) {
+                                return getProxyUrl(inner);
+                            }
+                        } catch (e) {}
+                        // 解析不出内层真实地址时，按本站代理地址兜底（相对路径会解析到本页域名）
+                        return getProxyUrl(trimmed);
+                    }
+                    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+                    const absoluteUrl = resolveUrl(baseUrl, trimmed);
                     return isProxyM3u8 ? getProxyUrl(absoluteUrl) : absoluteUrl;
                 }
 
